@@ -1,0 +1,52 @@
+{
+  "MX Master": {
+    "logid_name": "Wireless Mouse MX Master",
+    "cids": {
+      "gesture": "0xc3",
+      "back": "0x53",
+      "forward": "0x56",
+      "middle": "0x52",
+      "mode_shift": "0xd7"
+    }
+  },
+  "MX Master 2S": {
+    "logid_name": "Wireless Mouse MX Master 2S",
+    "cids": {
+      "gesture": "0xc3",
+      "back": "0x53",
+      "forward": "0x56",
+      "middle": "0x52",
+      "mode_shift": "0xd7"
+    }
+  },
+  "MX Master 3": {
+    "logid_name": "MX Master 3",
+    "cids": {
+      "gesture": "0xc3",
+      "back": "0x53",
+      "forward": "0x56",
+      "middle": "0x52",
+      "mode_shift": "0xd7"
+    }
+  },
+  "MX Master 3S": {
+    "logid_name": "MX Master 3S",
+    "cids": {
+      "gesture": "0xc3",
+      "back": "0x53",
+      "forward": "0x56",
+      "middle": "0x52",
+      "mode_shift": "0xd7"
+    }
+  },
+  "MX Master 4": {
+    "logid_name": "MX Master 4",
+    "cids": {
+      "gesture": "0xc3",
+      "back": "0x53",
+      "forward": "0x56",
+      "middle": "0x52",
+      "mode_shift": "0xd7"
+    }
+  }
+}
