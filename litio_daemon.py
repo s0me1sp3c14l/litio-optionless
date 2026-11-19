@@ -1,3 +1,4 @@
+import re
 #!/usr/bin/env python3
 import os, json, time, select, threading, subprocess, evdev
 from pynput import mouse, keyboard
@@ -26,6 +27,33 @@ def send_combo(sc):
     if key_obj: KB.press(key_obj); KB.release(key_obj)
     for mk in reversed(held): KB.release(mk)
 
+_vol_pending = 0
+_vol_running = False
+_vol_lock = threading.Lock()
+def _queue_fine_vol(delta):
+    global _vol_pending, _vol_running
+    with _vol_lock:
+        _vol_pending += delta
+        if _vol_running: return
+        _vol_running = True
+    def _worker():
+        global _vol_pending, _vol_running
+        try:
+            with _vol_lock:
+                d_val = max(-6, min(6, _vol_pending)); _vol_pending = 0
+            if d_val != 0:
+                out = subprocess.check_output(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], stderr=subprocess.DEVNULL).decode()
+                m = re.search(r"(\d+)%", out)
+                cur_v = int(m.group(1)) if m else 50
+                new_v = max(0, min(150, cur_v + d_val))
+                subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{new_v}%"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                osd_v = min(100, int(round(new_v * 100 / 150)))
+                ico = "audio-volume-muted" if new_v == 0 else ("audio-volume-low" if new_v < 50 else ("audio-volume-medium" if new_v < 105 else "audio-volume-high"))
+                subprocess.Popen(["gdbus", "call", "--session", "--dest", "org.Cinnamon", "--object-path", "/org/Cinnamon", "--method", "org.Cinnamon.ShowOSD", f"{{'icon': <'{ico}'>, 'level': <int32 {osd_v}>}}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        finally:
+            with _vol_lock: _vol_running = False
+    threading.Thread(target=_worker, daemon=True).start()
+
 def execute_action(sc, step=3, pressed=True):
     if not sc or sc in ("none", "gesture_mode", "smartshift_toggle"): return
     if sc in HOLD_MAP:
@@ -33,6 +61,9 @@ def execute_action(sc, step=3, pressed=True):
     if not pressed: return
     if sc in ("XF86AudioRaiseVolume", "XF86AudioLowerVolume", "XF86AudioMute", "XF86MonBrightnessUp", "XF86MonBrightnessDown"):
         subprocess.Popen(["xdotool", "key", "--clearmodifiers", sc])
+    elif sc in ("fine_vol_up", "fine_vol_down"):
+        step_s = "+2%" if sc == "fine_vol_up" else "-2%"
+        subprocess.Popen(["bash", "-c", f"pactl set-sink-volume @DEFAULT_SINK@ {step_s}; v=$(pactl get-sink-volume @DEFAULT_SINK@ | grep -oE '[0-9]+%' | head -n1 | tr -d '%'); [ $v -gt 150 ] && pactl set-sink-volume @DEFAULT_SINK@ 150% && v=150; ov=$((v*100/150)); gdbus call --session --dest org.Cinnamon --object-path /org/Cinnamon --method org.Cinnamon.ShowOSD \"{{\'icon\': <\'audio-volume-high\'>, \'level\': <int32 $ov>}}\" >/dev/null 2>&1"])
     elif sc == "system_lock": subprocess.Popen(["loginctl", "lock-session"])
     elif sc == "system_suspend": subprocess.Popen(["systemctl", "suspend"])
     elif sc in ("%", "percent"): subprocess.Popen(["xdotool", "key", "--clearmodifiers", "percent"])
@@ -72,20 +103,21 @@ class LitioDaemon:
         else:
             if pressed and sc not in HOLD_MAP:
                 now = time.monotonic()
-                if now - self.last_tap.get(slot, 0.0) < 0.35: return
+                if not slot.startswith("thumb_") and now - self.last_tap.get(slot, 0.0) < 0.35: return
                 self.last_tap[slot] = now
-            execute_action(sc, cfg.get("volume_step", 3), pressed)
+            eff_sc = ("fine_vol_up" if sc == "XF86AudioRaiseVolume" else ("fine_vol_down" if sc == "XF86AudioLowerVolume" else sc)) if slot.startswith("thumb_") else sc
+            execute_action(eff_sc, cfg.get("volume_step", 3), pressed)
 
 def scan_devs(known):
     for p in evdev.list_devices():
         if p in known: continue
         try:
             dev = evdev.InputDevice(p)
-            if "logiops" in dev.name.lower() or "virtual" in dev.name.lower(): known[p] = dev
+            if any(k in dev.name.lower() for k in ("logiops", "virtual", "mx master", "usb receiver mouse", "consumer control")): known[p] = dev
         except Exception: pass
 
 def run():
-    d = LitioDaemon(); known = {}
+    d = LitioDaemon(); known = {}; hw_acc = 0
     while True:
         scan_devs(known)
         if not known: time.sleep(1.0); continue
@@ -96,6 +128,11 @@ def run():
                     for ev in dev.read():
                         if ev.type == evdev.ecodes.EV_KEY and ev.code in KEY_SLOTS and ev.value in (0, 1):
                             d.handle_slot(KEY_SLOTS[ev.code], ev.value == 1)
+                        elif ev.type == evdev.ecodes.EV_REL and ev.code == 12 and ev.value != 0:
+                            hw_acc += ev.value
+                            while abs(hw_acc) >= 75:
+                                d.handle_slot("thumb_up" if hw_acc < 0 else "thumb_down", True)
+                                hw_acc += 75 if hw_acc < 0 else -75
                 except OSError: known.pop(dev.path, None)
         except Exception: known.clear(); time.sleep(0.5)
 

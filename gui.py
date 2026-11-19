@@ -17,7 +17,7 @@ DEVICES_FILE = os.path.join(APP_DIR, "devices.json")
 ANCHORS_FILE = os.path.join(APP_DIR, "callout_anchors.json")
 MODEL_ORDER = ["MX Master", "MX Master 2S", "MX Master 3", "MX Master 3S", "MX Master 4"]
 ACTION_LABELS = {"gesture_click": "Daumen-Gestentaste", "back": "Zurück-Taste", "forward": "Vorwärts-Taste", "thumb_up": "Daumenrad Hoch", "thumb_down": "Daumenrad Runter", "middle_click": "Scrollrad-Klick", "mode_shift": "Modus-Taste"}
-PRESET_SHORTCUTS = [("Benutzerdefiniert...", ""), ("Gestentaste (4 Maus-Richtungen)", "gesture_mode"), ("Mausrad-Modus (Freilauf / Raster)", "smartshift_toggle"), ("Horizontal Scrollen Links (◀)", "hscroll_left"), ("Horizontal Scrollen Rechts (▶)", "hscroll_right"), ("Lautstärke Hoch", "XF86AudioRaiseVolume"), ("Lautstärke Runter", "XF86AudioLowerVolume"), ("Ton Stumm", "XF86AudioMute"), ("Play / Pause", "XF86AudioPlay"), ("Helligkeit Hoch", "XF86MonBrightnessUp"), ("Helligkeit Runter", "XF86MonBrightnessDown"), ("Ausschneiden (Strg+X)", "ctrl+x"), ("Rückgängig (Strg+Z)", "ctrl+z"), ("Fenster maximieren", "alt+F10"), ("Fenster minimieren", "window_minimize"), ("Super / Startmenü", "Super_L"), ("Computer sperren", "system_lock"), ("Computer Standby", "system_suspend"), ("Deaktiviert", "none")]
+PRESET_SHORTCUTS = [("Benutzerdefiniert...", ""), ("Gestentaste (4 Maus-Richtungen)", "gesture_mode"), ("Mausrad-Modus (Freilauf / Raster)", "smartshift_toggle"), ("Horizontal Scrollen Links (◀)", "hscroll_left"), ("Horizontal Scrollen Rechts (▶)", "hscroll_right"), ("Lautstärke Hoch", "XF86AudioRaiseVolume"), ("Lautstärke Runter", "XF86AudioLowerVolume"), ("Ton Stumm", "XF86AudioMute"), ("Play / Pause", "XF86AudioPlay"), ("Helligkeit Hoch", "XF86MonBrightnessUp"), ("Helligkeit Runter", "XF86MonBrightnessDown"), ("Ausschneiden (Strg+X)", "ctrl+x"), ("Rückgängig (Strg+Z)", "ctrl+z"), ("Fenster maximieren", "alt+F10"), ("Fenster minimieren", "window_minimize"), ("Super / Startmenü", "Super_L"), ("Computer sperren", "system_lock"), ("Computer Standby", "system_suspend"), ("Global übernehmen (Standard)", ""), ("Deaktiviert / Natives Verhalten", "none")]
 SUB_PRESET_SHORTCUTS = [p for p in PRESET_SHORTCUTS if p[1] != "gesture_mode"]
 
 STYLESHEET = """
@@ -293,6 +293,10 @@ class LitioOptionlessWindow(QMainWindow):
         self.ss_lbl = QLabel(f"SmartShift Freilauf-Schwelle: {ss_val}"); self.ss_lbl.setStyleSheet("font-weight: 600;"); cl.addWidget(self.ss_lbl)
         self.ss_slider = QSlider(Qt.Orientation.Horizontal); self.ss_slider.setRange(5, 50); self.ss_slider.setValue(ss_val)
         self.ss_slider.valueChanged.connect(lambda v: self.ss_lbl.setText(f"SmartShift Freilauf-Schwelle: {v}")); cl.addWidget(self.ss_slider)
+        tq_val = int(self.config.get("smartshift", {}).get("torque", 50))
+        self.tq_lbl = QLabel(f"Scrollrad-Widerstand (Raster-Drehmoment): {tq_val}%"); self.tq_lbl.setStyleSheet("font-weight: 600;"); cl.addWidget(self.tq_lbl)
+        self.tq_slider = QSlider(Qt.Orientation.Horizontal); self.tq_slider.setRange(10, 100); self.tq_slider.setValue(tq_val)
+        self.tq_slider.valueChanged.connect(lambda v: self.tq_lbl.setText(f"Scrollrad-Widerstand (Raster-Drehmoment): {v}%")); cl.addWidget(self.tq_slider)
         self.inv_scroll_cb = QCheckBox("Natürliches Scrollen (Scrollrad-Richtung invertieren)"); self.inv_scroll_cb.setChecked(bool(self.config.get("invert_scroll", False))); cl.addWidget(self.inv_scroll_cb)
         self.hw_btn = QPushButton("Einstellungen übernehmen & in Hardware schreiben"); self.hw_btn.setObjectName("AccentBtn"); self.hw_btn.clicked.connect(self.apply_hw); cl.addWidget(self.hw_btn); cl.addStretch(); l.addWidget(c); return p
     def build_profiles_tab(self):
@@ -321,7 +325,12 @@ class LitioOptionlessWindow(QMainWindow):
     def save_current_slot(self):
         pd = self.config["profiles"][self.current_profile]
         if self.current_profile != "Global (Standard)": pd["wm_classes"] = [c.strip().lower() for c in self.wm_class_edit.text().split(",") if c.strip()]
-        sc = self.shortcut_edit.text().strip() or "none"; pd.setdefault("buttons", {})[self.current_slot] = sc
+        sc = self.shortcut_edit.text().strip()
+        if not sc and self.current_profile != "Global (Standard)":
+            pd.setdefault("buttons", {}).pop(self.current_slot, None)
+            pd.get("gestures", {}).pop(self.current_slot, None)
+        else:
+            pd.setdefault("buttons", {})[self.current_slot] = sc or "none"
         if sc == "gesture_mode": pd.setdefault("gestures", {})[self.current_slot] = {"enabled": True, **self.gest_values}
         json.dump(self.config, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2); self.select_slot(self.current_slot)
     def _sync_profiles_ui(self, select_name=None):
@@ -382,13 +391,15 @@ class LitioOptionlessWindow(QMainWindow):
                 if isinstance(v, dict) and "buttons" in v: self.config["profiles"][k] = v
             self._sync_profiles_ui()
     def apply_hw(self):
-        dpi = self.dpi_slider.value(); thr = self.ss_slider.value(); inv = self.inv_scroll_cb.isChecked()
-        self.config["dpi"] = dpi; self.config["invert_scroll"] = inv; self.config["smartshift"] = {"on": True, "threshold": thr}
+        dpi = self.dpi_slider.value(); thr = self.ss_slider.value(); tq = self.tq_slider.value(); inv = self.inv_scroll_cb.isChecked()
+        tq_hw = max(25, min(255, int(tq * 2.55)))
+        self.config["dpi"] = dpi; self.config["invert_scroll"] = inv; self.config["smartshift"] = {"on": True, "threshold": thr, "torque": tq}
         json.dump(self.config, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2)
         inv_s = "true" if inv else "false"; blocks = []
         for m_name, d in self.devices.items():
             if "4" in m_name: continue
-            c = d["cids"]; ss_line = "" if "3S" in m_name else f"    smartshift: {{ on: true; threshold: {thr}; }};\n"
+            c = d["cids"]; tq_s = f" torque: {tq_hw};" if "3" in m_name else ""
+            ss_line = f"    smartshift: {{ on: true; threshold: {thr};{tq_s} }};\n"
             blocks.append(f'{{\n    name: "{d.get("logid_name", m_name)}";\n{ss_line}    hiresscroll: {{ hires: false; invert: {inv_s}; target: false; }};\n    dpi: {dpi};\n    thumbwheel: {{ divert: false; invert: false; left: {{ mode: "OnInterval"; interval: 2; action: {{ type: "Keypress"; keys: ["KEY_F17"]; }}; }}; right: {{ mode: "OnInterval"; interval: 2; action: {{ type: "Keypress"; keys: ["KEY_F18"]; }}; }}; }};\n    buttons: (\n        {{ cid: {c["gesture"]}; action = {{ type: "Keypress"; keys: ["KEY_F13"]; }}; }},\n        {{ cid: {c["back"]}; action = {{ type: "Keypress"; keys: ["KEY_F14"]; }}; }},\n        {{ cid: {c["forward"]}; action = {{ type: "Keypress"; keys: ["KEY_F15"]; }}; }},\n        {{ cid: {c["middle"]}; action = {{ type: "Keypress"; keys: ["KEY_F16"]; }}; }},\n        {{ cid: {c["mode_shift"]}; action = {{ type: "Keypress"; keys: ["KEY_F19"]; }}; }}\n    );\n}}')
         open("/tmp/logid_new.cfg", "w").write("devices: (\n" + ",\n".join(blocks) + "\n);\n")
         subprocess.run(["pkexec", "bash", "-c", "cp /tmp/logid_new.cfg /etc/logid.cfg && systemctl restart logid"])
