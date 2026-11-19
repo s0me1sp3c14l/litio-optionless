@@ -23,9 +23,21 @@ def send_combo(sc):
         mk = mod_map.get(p.lower())
         if mk: KB.press(mk); held.append(mk)
     last = parts[-1] if parts else ""
-    key_obj = sp_map.get(last.lower()) or (getattr(keyboard.Key, last.lower()) if last.lower().startswith("f") and last[1:].isdigit() else (last if len(last) == 1 else None))
-    if key_obj: KB.press(key_obj); KB.release(key_obj)
-    for mk in reversed(held): KB.release(mk)
+    try:
+        if last == "%" or last.lower() == "percent":
+            KB.press(keyboard.Key.shift_l); time.sleep(0.012)
+            KB.press("5"); time.sleep(0.012); KB.release("5")
+            time.sleep(0.012); KB.release(keyboard.Key.shift_l)
+        else:
+            key_obj = sp_map.get(last.lower()) or (getattr(keyboard.Key, last.lower()) if last.lower().startswith("f") and last[1:].isdigit() else (last if len(last) == 1 else None))
+            if key_obj:
+                KB.press(key_obj); time.sleep(0.01); KB.release(key_obj)
+    finally:
+        for mk in reversed(held):
+            try: KB.release(mk)
+            except Exception: pass
+        try: KB.release(keyboard.Key.shift_l); KB.release(keyboard.Key.shift_r)
+        except Exception: pass
 
 _vol_pending = 0
 _vol_running = False
