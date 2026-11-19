@@ -408,8 +408,12 @@ class LitioOptionlessWindow(QMainWindow):
         self.hw_btn.setText("✓ Gespeichert & Profile aktiv"); QTimer.singleShot(3000, lambda: self.hw_btn.setText("Einstellungen übernehmen & in Hardware schreiben"))
     def setup_tray(self):
         self.tray = QSystemTrayIcon(QIcon.fromTheme("input-mouse"), self); self.tray.setToolTip("LITIO"); m = QMenu(); m.addAction("Öffnen", self.showNormal); m.addAction("Beenden", QApplication.instance().quit); self.tray.setContextMenu(m)
-        self.tray.activated.connect(lambda r: (self.showNormal(), self.raise_(), self.activateWindow()) if r in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick) else None)
+        self.tray.activated.connect(lambda r: (self.showNormal(), self._center_on_screen(), self.raise_(), self.activateWindow()) if r in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick) else None)
         self.tray.show()
+    def _center_on_screen(self):
+        scr = QApplication.primaryScreen()
+        if scr:
+            fg = self.frameGeometry(); fg.moveCenter(scr.availableGeometry().center()); self.move(fg.topLeft())
     def closeEvent(self, ev):
         ev.ignore(); self.hide()
 if __name__ == "__main__":
@@ -420,5 +424,5 @@ if __name__ == "__main__":
     except OSError:
         sys.exit(0)
     app = QApplication(sys.argv); app.setApplicationName("LITIO"); app.setDesktopFileName("litio-optionless"); app.setStyleSheet(STYLESHEET); w = LitioOptionlessWindow()
-    if "--minimized" not in sys.argv: w.show()
+    if "--minimized" not in sys.argv: w.show(); w._center_on_screen()
     sys.exit(app.exec())
