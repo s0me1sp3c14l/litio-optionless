@@ -285,10 +285,10 @@ class LitioOptionlessWindow(QMainWindow):
         ctrl = QVBoxLayout(); ctrl.setSpacing(10); dlbl = QLabel("Richtung ↑ Hoch:"); dlbl.setStyleSheet("color: #E8E3F2; font-weight: 600; background: transparent;"); ctrl.addWidget(dlbl)
         pre = QComboBox()
         for lbl, sc in SUB_PRESET_SHORTCUTS: pre.addItem(lbl, sc)
-        _sel("up")
         ctrl.addWidget(pre); ded = ShortcutRecorderEdit(); ctrl.addWidget(ded); ctrl.addStretch(); body.addLayout(ctrl, 1); cl.addLayout(body)
         names = {"up": "↑ Hoch", "down": "↓ Runter", "left": "← Links", "right": "→ Rechts"}
         def _sel(d): dlbl.setText(f"Richtung {names.get(d, d)}:"); gv = self.gest_values.get(d, ""); gi = pre.findData(gv); pre.blockSignals(True); pre.setCurrentIndex(gi if gi > 0 else 0); pre.blockSignals(False); ded.blockSignals(True); ded.setText(gv); ded.blockSignals(False)
+        _sel("up")
         def _chg(txt): self.gest_values[pad.sel_dir] = txt.strip(); pad.set_values(self.gest_values)
         pre.currentIndexChanged.connect(lambda i: ded.setText(pre.itemData(i)) if i > 0 else None); ded.textChanged.connect(_chg); _sel(pad.sel_dir)
         foot = QHBoxLayout(); foot.addStretch(); ok_b = QPushButton("Übernehmen & Schließen"); ok_b.setObjectName("AccentBtn"); ok_b.clicked.connect(lambda: (self.save_current_slot(), ov.deleteLater())); foot.addWidget(ok_b); cl.addLayout(foot); ov.show()
