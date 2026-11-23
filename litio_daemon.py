@@ -15,6 +15,7 @@ def ensure_config():
         json.dump({"language": "de", "volume_step": 3, "profiles": {"Global (Standard)": {"buttons": {}, "gestures": {}}}}, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2)
 
 def send_combo(sc):
+    if sc.lower() in ("xf86audioplay","xf86audioprev","xf86audionext"): subprocess.Popen(["playerctl",{"xf86audioplay":"play-pause","xf86audioprev":"previous","xf86audionext":"next"}[sc.lower()]]); return
     parts = [p.strip() for p in sc.split("+") if p.strip()]
     mod_map = {"ctrl": keyboard.Key.ctrl_l, "control_l": keyboard.Key.ctrl_l, "alt": keyboard.Key.alt_l, "alt_l": keyboard.Key.alt_l, "shift": keyboard.Key.shift_l, "super_l": keyboard.Key.cmd}
     sp_map = {"up": keyboard.Key.up, "down": keyboard.Key.down, "left": keyboard.Key.left, "right": keyboard.Key.right, "return": keyboard.Key.enter, "escape": keyboard.Key.esc, "tab": keyboard.Key.tab, "backspace": keyboard.Key.backspace, "delete": keyboard.Key.delete, "space": keyboard.Key.space, "plus": "+", "minus": "-", "percent": "%", "bracketleft": "[", "bracketright": "]", "xf86audioprev": keyboard.Key.media_previous, "xf86audionext": keyboard.Key.media_next, "xf86audioplay": keyboard.Key.media_play_pause}
@@ -107,9 +108,9 @@ class LitioDaemon:
                         time.sleep(0.028)
                         if s not in self.gest_starts: break
                         sx, sy = self.gest_starts[s]; ex, ey = self.m_ctrl.position; dx, dy = ex - sx, ey - sy
-                        if abs(dx) >= 24 or abs(dy) >= 24:
+                        if abs(dx) >= 42 or abs(dy) >= 42:
                             d = ("right" if dx > 0 else "left") if abs(dx) > abs(dy) else ("down" if dy > 0 else "up")
-                            execute_action(gc.get(d, ""), st, True); self.gest_starts[s] = (ex, ey)
+                            execute_action(gc.get(d, ""), st, True); break
                 threading.Thread(target=_track, daemon=True).start()
             else: self.gest_starts.pop(slot, None)
         else:

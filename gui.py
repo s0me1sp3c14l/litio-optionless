@@ -140,7 +140,7 @@ class ShortcutRecorderEdit(QLineEdit):
 
 class GestureVisualPad(QWidget):
     def __init__(self, on_dir, parent=None):
-        super().__init__(parent); self.on_dir, self.sel_dir = on_dir, "up"; self.dir_values = {"up": "", "down": "", "left": "", "right": ""}; self.setFixedSize(320, 148)
+        super().__init__(parent); self.on_dir, self.sel_dir, self.model = on_dir, "up", "MX Master 3S"; self.dir_values = {"up": "", "down": "", "left": "", "right": ""}; self.setFixedSize(320, 148)
         self.zones = {"up": QRectF(110, 4, 100, 32), "down": QRectF(110, 112, 100, 32), "left": QRectF(6, 58, 96, 32), "right": QRectF(218, 58, 96, 32)}
     def set_values(self, vals):
         for k in self.dir_values: self.dir_values[k] = vals.get(k, "") if isinstance(vals, dict) else ""
@@ -150,7 +150,7 @@ class GestureVisualPad(QWidget):
             if r.contains(QPointF(e.position())): self.sel_dir = d; self.update(); self.on_dir(d); return
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing); cx, cy = self.width() / 2.0, self.height() / 2.0
-        p.setPen(QPen(QColor("#A855F7"), 1.6)); p.setBrush(QBrush(QColor("#1A1724"))); p.drawRoundedRect(QRectF(cx - 18, cy - 26, 36, 52), 16, 16); p.drawLine(QPointF(cx, cy - 22), QPointF(cx, cy - 8))
+        mk = {"MX Master": "mx_master", "MX Master 2S": "mx_master_2s", "MX Master 3": "mx_master_3s", "MX Master 3S": "mx_master_3s", "MX Master 4": "mx_master_4"}.get(self.model, "mx_master_3s"); sp = os.path.join(APP_DIR, f"{mk}.svg"); rnd = QSvgRenderer(sp) if os.path.exists(sp) else None; ds = rnd.defaultSize() if rnd else None; sc = min(56.0 / ds.width(), 64.0 / ds.height()) if (ds and ds.width() > 0) else 0; rnd.render(p, QRectF(cx - ds.width()*sc/2, cy - ds.height()*sc/2, ds.width()*sc, ds.height()*sc)) if sc > 0 else None
         arrows = {"up": "↑", "down": "↓", "left": "←", "right": "→"}
         for d, r in self.zones.items():
             sel = (d == self.sel_dir); p.setPen(QPen(QColor("#C084FC" if sel else "#3A334F"), 1.6 if sel else 1.1)); p.setBrush(QBrush(QColor("#2D2142" if sel else "#121018"))); p.drawRoundedRect(r, 8, 8)
@@ -272,7 +272,7 @@ class LitioOptionlessWindow(QMainWindow):
         card = QFrame(ov); card.setObjectName("Card"); card.setFixedSize(680, 340); card.move((self.width() - 680) // 2, (self.height() - 340) // 2)
         cl = QVBoxLayout(card); cl.setContentsMargins(24, 20, 24, 20); cl.setSpacing(14)
         hdr = QLabel(f"4-Wege-Gesten — {ACTION_LABELS.get(self.current_slot, self.current_slot)}"); hdr.setStyleSheet("font-size: 17px; font-weight: 700; color: #C084FC; background: transparent;"); cl.addWidget(hdr)
-        body = QHBoxLayout(); body.setSpacing(24); pad = GestureVisualPad(lambda d: _sel(d)); pad.set_values(self.gest_values); body.addWidget(pad)
+        body = QHBoxLayout(); body.setSpacing(24); pad = GestureVisualPad(lambda d: _sel(d)); pad.model = self.mouse_vis.model; pad.set_values(self.gest_values); body.addWidget(pad)
         ctrl = QVBoxLayout(); ctrl.setSpacing(10); dlbl = QLabel("Richtung ↑ Hoch:"); dlbl.setStyleSheet("color: #E8E3F2; font-weight: 600; background: transparent;"); ctrl.addWidget(dlbl)
         pre = QComboBox()
         for lbl, sc in SUB_PRESET_SHORTCUTS: pre.addItem(lbl, sc)
