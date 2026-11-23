@@ -16,8 +16,8 @@ def ensure_config():
 
 def send_combo(sc):
     parts = [p.strip() for p in sc.split("+") if p.strip()]
-    mod_map = {"ctrl": keyboard.Key.ctrl_l, "alt": keyboard.Key.alt_l, "shift": keyboard.Key.shift_l, "super_l": keyboard.Key.cmd}
-    sp_map = {"up": keyboard.Key.up, "down": keyboard.Key.down, "left": keyboard.Key.left, "right": keyboard.Key.right, "return": keyboard.Key.enter, "escape": keyboard.Key.esc, "tab": keyboard.Key.tab, "backspace": keyboard.Key.backspace, "delete": keyboard.Key.delete, "space": keyboard.Key.space, "plus": "+", "minus": "-", "percent": "%", "bracketleft": "[", "bracketright": "]"}
+    mod_map = {"ctrl": keyboard.Key.ctrl_l, "control_l": keyboard.Key.ctrl_l, "alt": keyboard.Key.alt_l, "alt_l": keyboard.Key.alt_l, "shift": keyboard.Key.shift_l, "super_l": keyboard.Key.cmd}
+    sp_map = {"up": keyboard.Key.up, "down": keyboard.Key.down, "left": keyboard.Key.left, "right": keyboard.Key.right, "return": keyboard.Key.enter, "escape": keyboard.Key.esc, "tab": keyboard.Key.tab, "backspace": keyboard.Key.backspace, "delete": keyboard.Key.delete, "space": keyboard.Key.space, "plus": "+", "minus": "-", "percent": "%", "bracketleft": "[", "bracketright": "]", "xf86audioprev": keyboard.Key.media_previous, "xf86audionext": keyboard.Key.media_next, "xf86audioplay": keyboard.Key.media_play_pause}
     held = []
     for p in parts[:-1]:
         mk = mod_map.get(p.lower())
