@@ -102,17 +102,25 @@ class LitioDaemon:
         if sc == "gesture_mode":
             gcfg = (pd.get("gestures", {}).get(slot) if pd.get("gestures", {}).get(slot) else None) or gl.get("gestures", {}).get(slot) or {}
             if pressed:
-                self.gest_starts[slot] = self.m_ctrl.position
+                self.gest_starts[slot] = self.m_ctrl.position; self.gest_fired[slot] = False
                 def _track(s=slot, gc=gcfg, st=cfg.get("volume_step", 3)):
+                    cont = {"XF86MonBrightnessUp", "XF86MonBrightnessDown", "XF86AudioRaiseVolume", "XF86AudioLowerVolume", "fine_vol_up", "fine_vol_down", "hscroll_left", "hscroll_right"}
                     while s in self.gest_starts:
                         time.sleep(0.028)
                         if s not in self.gest_starts: break
                         sx, sy = self.gest_starts[s]; ex, ey = self.m_ctrl.position; dx, dy = ex - sx, ey - sy
-                        if abs(dx) >= 42 or abs(dy) >= 42:
-                            d = ("right" if dx > 0 else "left") if abs(dx) > abs(dy) else ("down" if dy > 0 else "up")
-                            execute_action(gc.get(d, ""), st, True); break
+                        if abs(dx) >= 24 or abs(dy) >= 24:
+                            dr = ("right" if dx > 0 else "left") if abs(dx) > abs(dy) else ("down" if dy > 0 else "up")
+                            act = gc.get(dr, "")
+                            if act in cont:
+                                self.gest_fired[s] = True; execute_action(act, st, True); self.gest_starts[s] = (ex, ey)
+                            elif abs(dx) >= 42 or abs(dy) >= 42:
+                                self.gest_fired[s] = True; execute_action(act, st, True); break
                 threading.Thread(target=_track, daemon=True).start()
-            else: self.gest_starts.pop(slot, None)
+            else:
+                self.gest_starts.pop(slot, None)
+                if not self.gest_fired.pop(slot, False) and gcfg.get("click"):
+                    execute_action(gcfg.get("click", ""), cfg.get("volume_step", 3), True)
         else:
             if pressed and sc not in HOLD_MAP:
                 now = time.monotonic()

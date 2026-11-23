@@ -140,8 +140,8 @@ class ShortcutRecorderEdit(QLineEdit):
 
 class GestureVisualPad(QWidget):
     def __init__(self, on_dir, parent=None):
-        super().__init__(parent); self.on_dir, self.sel_dir, self.model = on_dir, "up", "MX Master 3S"; self.dir_values = {"up": "", "down": "", "left": "", "right": ""}; self.setFixedSize(360, 252)
-        self.zones = {"up": QRectF(125, 2, 110, 32), "down": QRectF(125, 218, 110, 32), "left": QRectF(4, 110, 102, 32), "right": QRectF(254, 110, 102, 32)}
+        super().__init__(parent); self.on_dir, self.sel_dir, self.model = on_dir, "up", "MX Master 3S"; self.dir_values = {"up": "", "down": "", "left": "", "right": "", "click": ""}; self.setFixedSize(360, 252)
+        self.zones = {"up": QRectF(125, 2, 110, 32), "down": QRectF(125, 218, 110, 32), "left": QRectF(4, 110, 102, 32), "right": QRectF(254, 110, 102, 32), "click": QRectF(132, 110, 96, 32)}
     def set_values(self, vals):
         for k in self.dir_values: self.dir_values[k] = vals.get(k, "") if isinstance(vals, dict) else ""
         self.update()
@@ -160,7 +160,7 @@ class GestureVisualPad(QWidget):
                 if "style" in el_x.attrib: el_x.set("style", re.sub(r"stroke:[^;]+", "stroke:#00ffff", el_x.get("style")))
             rnd = QSvgRenderer(QByteArray(ET.tostring(rx_xml, encoding="utf-8"))); ds = rnd.defaultSize()
             if ds.width() > 0: sc = min(98.0 / ds.width(), 128.0 / ds.height()); rnd.render(p, QRectF(cx - ds.width()*sc/2, cy - ds.height()*sc/2, ds.width()*sc, ds.height()*sc))
-        arrows = {"up": "↑", "down": "↓", "left": "←", "right": "→"}
+        arrows = {"up": "↑", "down": "↓", "left": "←", "right": "→", "click": "●"}
         for d, r in self.zones.items():
             sel = (d == self.sel_dir); p.setPen(QPen(QColor("#C084FC" if sel else "#3A334F"), 1.6 if sel else 1.1)); p.setBrush(QBrush(QColor("#2D2142" if sel else "#121018"))); p.drawRoundedRect(r, 8, 8)
             val = self.dir_values.get(d) or "—"; val = val[:9] + "…" if len(val) > 10 else val; p.setPen(QColor("#FFFFFF" if sel else "#C8C1D6")); p.drawText(r, Qt.AlignmentFlag.AlignCenter, f"{arrows[d]} {val}")
@@ -272,7 +272,7 @@ class LitioOptionlessWindow(QMainWindow):
         self.preset_combo.currentIndexChanged.connect(lambda i: self.shortcut_edit.setText(self.preset_combo.itemData(i)) if i > 0 else None); rl.addWidget(self.preset_combo)
         self.shortcut_edit = ShortcutRecorderEdit(); self.shortcut_edit.textChanged.connect(lambda t: self.gest_box.setVisible(t.strip() == "gesture_mode")); rl.addWidget(self.shortcut_edit)
         self.gest_box = QPushButton("⚙ 4-Wege-Gesten konfigurieren…"); self.gest_box.setObjectName("SecondaryBtn"); self.gest_box.clicked.connect(self.open_gesture_overlay)
-        self.gest_values = {"up": "", "down": "", "left": "", "right": ""}; self.gest_box.setVisible(False); rl.addWidget(self.gest_box)
+        self.gest_values = {"up": "", "down": "", "left": "", "right": "", "click": ""}; self.gest_box.setVisible(False); rl.addWidget(self.gest_box)
         self.wm_class_edit = QLineEdit(); self.wm_class_edit.setPlaceholderText("WM_CLASS (z.B. inkscape, firefox)"); rl.addWidget(self.wm_class_edit)
         sb = QPushButton("Belegung speichern"); sb.setObjectName("AccentBtn"); sb.clicked.connect(self.save_current_slot); rl.addWidget(sb)
         self.ov_box = QLabel(""); self.ov_box.setStyleSheet("background-color: #100E15; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 11px; color: #C084FC;"); self.ov_box.setWordWrap(True); rl.addWidget(self.ov_box); rl.addStretch(); l.addWidget(right); return p
@@ -286,7 +286,7 @@ class LitioOptionlessWindow(QMainWindow):
         pre = QComboBox()
         for lbl, sc in SUB_PRESET_SHORTCUTS: pre.addItem(lbl, sc)
         ctrl.addWidget(pre); ded = ShortcutRecorderEdit(); ctrl.addWidget(ded); ctrl.addStretch(); body.addLayout(ctrl, 1); cl.addLayout(body)
-        names = {"up": "↑ Hoch", "down": "↓ Runter", "left": "← Links", "right": "→ Rechts"}
+        names = {"up": "↑ Hoch", "down": "↓ Runter", "left": "← Links", "right": "→ Rechts", "click": "● Klick (ohne Bewegung)"}
         def _sel(d): dlbl.setText(f"Richtung {names.get(d, d)}:"); gv = self.gest_values.get(d, ""); gi = pre.findData(gv); pre.blockSignals(True); pre.setCurrentIndex(gi if gi > 0 else 0); pre.blockSignals(False); ded.blockSignals(True); ded.setText(gv); ded.blockSignals(False)
         _sel("up")
         def _chg(txt): self.gest_values[pad.sel_dir] = txt.strip(); pad.set_values(self.gest_values)
@@ -330,7 +330,7 @@ class LitioOptionlessWindow(QMainWindow):
     def select_slot(self, slot):
         self.current_slot = slot; self.slot_title.setText(ACTION_LABELS.get(slot, slot)); pd = self.config["profiles"].get(self.current_profile, {})
         self.shortcut_edit.setText(pd.get("buttons", {}).get(slot, "")); idx = self.preset_combo.findData(self.shortcut_edit.text().strip()); self.preset_combo.blockSignals(True); self.preset_combo.setCurrentIndex(idx if idx > 0 else 0); self.preset_combo.blockSignals(False); gd = pd.get("gestures", {}).get(slot, {})
-        self.gest_values = {k: (gd.get(k, "") if isinstance(gd, dict) else "") for k in ("up", "down", "left", "right")}
+        self.gest_values = {k: (gd.get(k, "") if isinstance(gd, dict) else "") for k in ("up", "down", "left", "right", "click")}
         btns = pd.get("buttons", {}); self.ov_box.setText("\n".join([f"{ACTION_LABELS.get(k, k)}: {btns.get(k, 'none')}" for k in ["gesture_click", "back", "forward", "thumb_up", "thumb_down", "middle_click", "mode_shift"]]))
     def save_current_slot(self):
         pd = self.config["profiles"][self.current_profile]
