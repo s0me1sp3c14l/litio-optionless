@@ -15,7 +15,7 @@ def ensure_config():
         json.dump({"language": "de", "volume_step": 3, "profiles": {"Global (Standard)": {"buttons": {}, "gestures": {}}}}, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2)
 
 def send_combo(sc):
-    if sc.lower() in ("xf86audioplay","xf86audioprev","xf86audionext"): subprocess.Popen(["playerctl",{"xf86audioplay":"play-pause","xf86audioprev":"previous","xf86audionext":"next"}[sc.lower()]]); return
+    if sc.lower() in ("xf86audioplay","xf86audioprev","xf86audionext"): subprocess.Popen(["playerctl", "-a", {"xf86audioplay":"play-pause","xf86audioprev":"previous","xf86audionext":"next"}[sc.lower()]]); return
     parts = [p.strip() for p in sc.split("+") if p.strip()]
     mod_map = {"ctrl": keyboard.Key.ctrl_l, "control_l": keyboard.Key.ctrl_l, "alt": keyboard.Key.alt_l, "alt_l": keyboard.Key.alt_l, "shift": keyboard.Key.shift_l, "super_l": keyboard.Key.cmd}
     sp_map = {"up": keyboard.Key.up, "down": keyboard.Key.down, "left": keyboard.Key.left, "right": keyboard.Key.right, "return": keyboard.Key.enter, "escape": keyboard.Key.esc, "tab": keyboard.Key.tab, "backspace": keyboard.Key.backspace, "delete": keyboard.Key.delete, "space": keyboard.Key.space, "plus": "+", "minus": "-", "percent": "%", "bracketleft": "[", "bracketright": "]", "xf86audioprev": keyboard.Key.media_previous, "xf86audionext": keyboard.Key.media_next, "xf86audioplay": keyboard.Key.media_play_pause}
@@ -90,7 +90,7 @@ def active_wm_class():
 
 class LitioDaemon:
     def __init__(self):
-        ensure_config(); self.m_ctrl = mouse.Controller(); self.gest_starts, self.last_tap = {}, {}
+        ensure_config(); self.m_ctrl = mouse.Controller(); self.gest_starts, self.last_tap, self.gest_fired = {}, {}, {}
     def get_profile(self):
         cfg = json.load(open(PROFILES_FILE, encoding="utf-8")); wm = active_wm_class()
         for name, pd in cfg.get("profiles", {}).items():
@@ -109,17 +109,19 @@ class LitioDaemon:
                         time.sleep(0.028)
                         if s not in self.gest_starts: break
                         sx, sy = self.gest_starts[s]; ex, ey = self.m_ctrl.position; dx, dy = ex - sx, ey - sy
-                        if abs(dx) >= 24 or abs(dy) >= 24:
+                        if abs(dx) >= 36 or abs(dy) >= 36:
                             dr = ("right" if dx > 0 else "left") if abs(dx) > abs(dy) else ("down" if dy > 0 else "up")
                             act = gc.get(dr, "")
                             if act in cont:
                                 self.gest_fired[s] = True; execute_action(act, st, True); self.gest_starts[s] = (ex, ey)
-                            elif abs(dx) >= 42 or abs(dy) >= 42:
+                            elif abs(dx) >= 48 or abs(dy) >= 48:
                                 self.gest_fired[s] = True; execute_action(act, st, True); break
                 threading.Thread(target=_track, daemon=True).start()
             else:
                 self.gest_starts.pop(slot, None)
-                if not self.gest_fired.pop(slot, False) and gcfg.get("click"):
+                now = time.monotonic()
+                if not self.gest_fired.pop(slot, False) and gcfg.get("click") and now - self.last_tap.get(slot + "_clk", 0.0) >= 0.35:
+                    self.last_tap[slot + "_clk"] = now
                     execute_action(gcfg.get("click", ""), cfg.get("volume_step", 3), True)
         else:
             if pressed and sc not in HOLD_MAP:
