@@ -186,7 +186,7 @@ class MouseVisualWidget(QWidget):
 class LitioOptionlessWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Litio Optionless"); self.setWindowIcon(QIcon.fromTheme("input-mouse")); self.setFixedSize(1080, 700)
+        self.setWindowTitle("Litio Optionless"); self.setWindowIcon(QIcon("/opt/ai-workspace/litio-optionless/litio-icon.svg")); self.setFixedSize(1080, 700)
         self.devices = json.load(open(DEVICES_FILE, encoding="utf-8")) if os.path.exists(DEVICES_FILE) else {"MX Master 3S": {"logid_name": "MX Master 3S", "cids": {"gesture": "0xc3", "back": "0x53", "forward": "0x56", "middle": "0x52", "mode_shift": "0xd7"}}}
         os.makedirs(CONFIG_DIR, exist_ok=True); ensure_config()
         self.config = json.load(open(PROFILES_FILE, encoding="utf-8")) if os.path.exists(PROFILES_FILE) else {"language": "de", "profiles": {"Global (Standard)": {"buttons": {}}}}
@@ -407,7 +407,7 @@ class LitioOptionlessWindow(QMainWindow):
         subprocess.Popen(["python3", "-u", os.path.join(APP_DIR, "litio_daemon.py")], env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":0")}, stdout=open("/tmp/litio.log", "w"), stderr=subprocess.STDOUT)
         self.hw_btn.setText("✓ Gespeichert & Profile aktiv"); QTimer.singleShot(3000, lambda: self.hw_btn.setText("Einstellungen übernehmen & in Hardware schreiben"))
     def setup_tray(self):
-        self.tray = QSystemTrayIcon(QIcon.fromTheme("input-mouse"), self); self.tray.setToolTip("LITIO"); m = QMenu(); m.addAction("Öffnen", self.showNormal); m.addAction("Beenden", QApplication.instance().quit); self.tray.setContextMenu(m)
+        self.tray = QSystemTrayIcon(QIcon("/opt/ai-workspace/litio-optionless/litio-icon.svg"), self); self.tray.setToolTip("LITIO"); m = QMenu(); m.addAction("Öffnen", self.showNormal); m.addAction("Beenden", QApplication.instance().quit); self.tray.setContextMenu(m)
         self.tray.activated.connect(lambda r: (self.showNormal(), self._center_on_screen(), self.raise_(), self.activateWindow()) if r in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick) else None)
         self.tray.show()
     def _center_on_screen(self):
