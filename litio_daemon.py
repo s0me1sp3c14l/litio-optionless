@@ -5,7 +5,7 @@ from pynput import mouse, keyboard
 
 CONFIG_DIR = os.path.expanduser("~/.config/litio-optionless")
 PROFILES_FILE = os.path.join(CONFIG_DIR, "profiles.json")
-KEY_SLOTS = {evdev.ecodes.KEY_F13: "gesture_click", evdev.ecodes.KEY_F14: "back", evdev.ecodes.KEY_F15: "forward", evdev.ecodes.KEY_F16: "middle_click", evdev.ecodes.KEY_F17: "thumb_down", evdev.ecodes.KEY_F18: "thumb_up", evdev.ecodes.KEY_F19: "mode_shift"}
+KEY_SLOTS = {evdev.ecodes.KEY_F13: "gesture_click", evdev.ecodes.KEY_F14: "back", evdev.ecodes.KEY_F15: "forward", evdev.ecodes.KEY_F16: "middle_click", evdev.ecodes.KEY_F17: "thumb_up", evdev.ecodes.KEY_F18: "thumb_down", evdev.ecodes.KEY_F19: "mode_shift"}
 HOLD_MAP = {"Control_L": keyboard.Key.ctrl_l, "Control_R": keyboard.Key.ctrl_r, "Shift_L": keyboard.Key.shift_l, "Shift_R": keyboard.Key.shift_r, "Alt_L": keyboard.Key.alt_l, "Alt_R": keyboard.Key.alt_r, "Super_L": keyboard.Key.cmd}
 KB = keyboard.Controller()
 
@@ -158,7 +158,7 @@ def run():
                                 hw_acc = 0; continue
                             hw_acc += ev.value
                             while abs(hw_acc) >= 120:
-                                d.handle_slot("thumb_down" if hw_acc < 0 else "thumb_up", True)
+                                d.handle_slot("thumb_up" if hw_acc < 0 else "thumb_down", True)
                                 hw_acc += 120 if hw_acc < 0 else -120
                 except OSError: known.pop(dev.path, None)
         except Exception: known.clear(); time.sleep(0.5)
