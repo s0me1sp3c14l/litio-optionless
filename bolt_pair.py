@@ -1,3 +1,4 @@
+from bolt_scan import add_bolt_device
 import os, time, glob, select, subprocess
 
 def open_bolt_fd():
@@ -79,6 +80,7 @@ def run_bolt_pair(status_cb):
                 st = pkt[3:5].hex()
                 if st == "0200":
                     sl = pkt[11:12].hex()
+                    add_bolt_device("MX Master 4")
                     status_cb(f"✅ MX Master 4 erfolgreich auf Slot {sl} mit Logi Bolt gekoppelt!")
                     return
                 elif st.startswith("02"):

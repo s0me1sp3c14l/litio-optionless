@@ -5,10 +5,13 @@ from PyQt6.QtWidgets import (
     QPushButton, QComboBox, QLineEdit, QMessageBox, QFrame, QStackedWidget, QListWidget,
     QSystemTrayIcon, QMenu, QInputDialog, QGraphicsOpacityEffect, QSlider, QCheckBox, QFileDialog
 )
-from PyQt6.QtCore import Qt, QPointF, QRect, QRectF, QByteArray, QTimer, QPropertyAnimation, QVariantAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtSignal, QPointF, QRect, QRectF, QByteArray, QTimer, QPropertyAnimation, QVariantAnimation, QEasingCurve
 from PyQt6.QtGui import QIcon, QPainter, QColor, QPen, QBrush
 from PyQt6.QtSvg import QSvgRenderer
 from litio_daemon import ensure_config
+from bolt_pair import run_bolt_pair
+from bolt_scan import get_bolt_names
+import threading
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_DIR = os.path.expanduser("~/.config/litio-optionless")
@@ -52,8 +55,19 @@ def query_connected_mice(devices_dict):
             else: raw_usb = out
         except Exception: pass
     found = {}
-    if "046d:c548" in raw_usb.lower() or "bolt receiver" in raw_usb.lower(): found["MX Master 3S"] = "Bolt / USB"
-    elif "046d:c52b" in raw_usb.lower() or "unifying" in raw_usb.lower(): found["MX Master 2S"] = "Bolt / USB"
+    raw_inp = ""
+    try:
+        raw_inp = open("/proc/bus/input/devices", encoding="utf-8", errors="ignore").read()
+    except Exception:
+        pass
+    hid_text = ("\n".join(get_bolt_names()) + "\n" + raw_inp + "\n" + raw_up).lower()
+    for m in reversed(MODEL_ORDER):
+        if m in devices_dict and re.search(rf"\b{re.escape(m.lower())}\b", hid_text):
+            found[m] = "Bolt / USB"
+            hid_text = hid_text.replace(m.lower(), "")
+    if not found:
+        if "046d:c548" in raw_usb.lower() or "bolt receiver" in raw_usb.lower(): found["MX Master 3S"] = "Bolt / USB"
+        elif "046d:c52b" in raw_usb.lower() or "unifying" in raw_usb.lower(): found["MX Master 2S"] = "Bolt / USB"
     bt_low = raw_bt.lower()
     for m in reversed(MODEL_ORDER):
         if m in devices_dict and re.search(rf"\b{re.escape(m.lower())}\b", bt_low):
@@ -193,6 +207,7 @@ class MouseVisualWidget(QWidget):
             sel = (slot == self.sel_slot); p.setPen(QPen(QColor("#A855F7" if sel else "#3B354D"), 2.2 if sel else 1.4)); p.drawLine(QPointF(sx, sy), QPointF(tx, ty))
 
 class LitioOptionlessWindow(QMainWindow):
+    bolt_msg = pyqtSignal(str)
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Litio Optionless"); self.setWindowIcon(QIcon("/opt/ai-workspace/litio-optionless/litio-icon.svg")); self.setFixedSize(1080, 700)
@@ -220,12 +235,15 @@ class LitioOptionlessWindow(QMainWindow):
         foot = QHBoxLayout(); foot.addStretch(); ab = QPushButton("+ Gerät hinzufügen"); ab.setObjectName("SecondaryBtn"); ab.clicked.connect(self.open_add_device_overlay); foot.addWidget(ab); foot.addStretch(); vl.addLayout(foot); return w
     def open_add_device_overlay(self):
         ov = QFrame(self); ov.setGeometry(0, 0, self.width(), self.height()); ov.setStyleSheet("background-color: rgba(12, 10, 18, 215);")
-        card = QFrame(ov); card.setObjectName("Card"); card.setFixedSize(520, 290); card.move((self.width() - 520) // 2, (self.height() - 290) // 2)
+        card = QFrame(ov); card.setObjectName("Card"); card.setFixedSize(560, 300); card.move((self.width() - 560) // 2, (self.height() - 300) // 2)
         cl = QVBoxLayout(card); cl.setContentsMargins(24, 22, 24, 22); cl.setSpacing(14)
-        h = QLabel("+ Logitech-Maus verbinden"); h.setStyleSheet("font-size: 17px; font-weight: 700; color: #C084FC; background: transparent;"); cl.addWidget(h)
-        info = QLabel("1. Halte die Easy-Switch-Taste (1 / 2 / 3) unter deiner Maus 3 Sekunden gedrückt, bis die LED schnell blinkt.\n\n2. Öffne die Bluetooth-Kopplung oder stecke deinen Logi Bolt / Unifying-Empfänger ein — Litio erkennt die Maus danach automatisch im Karussell."); info.setWordWrap(True); info.setStyleSheet("color: #E8E3F2; background: transparent;"); cl.addWidget(info); cl.addStretch()
-        row = QHBoxLayout(); bt_b = QPushButton("Bluetooth-Kopplung öffnen"); bt_b.setObjectName("AccentBtn"); bt_b.clicked.connect(lambda: subprocess.Popen(["bash", "-c", "blueman-manager || cinnamon-settings bluetooth"])); row.addWidget(bt_b)
+        h = QLabel("+ Logitech-Maus verbinden (Bolt & Bluetooth)"); h.setStyleSheet("font-size: 17px; font-weight: 700; color: #C084FC; background: transparent;"); cl.addWidget(h)
+        info = QLabel("1. Halte die Easy-Switch-Taste (1 / 2 / 3) unter deiner MX Master 4 für 3 Sekunden gedrückt, bis die LED schnell blinkt.\n\n2. Klicke unten auf «Mit Logi Bolt koppeln» (verbindet die Maus über deinen bestehenden USB-A Empfänger) oder auf «Bluetooth». Danach erscheint sie automatisch in Litio."); info.setWordWrap(True); info.setStyleSheet("color: #E8E3F2; background: transparent;"); cl.addWidget(info); cl.addStretch()
+        row = QHBoxLayout()
+        bolt_b = QPushButton("Mit Logi Bolt koppeln"); bolt_b.setObjectName("AccentBtn"); st_lbl = QLabel("Bereit."); self.bolt_msg.connect(st_lbl.setText); st_lbl.setWordWrap(True); st_lbl.setStyleSheet("color: #38BDF8; font-weight: 600; background: transparent;"); cl.insertWidget(2, st_lbl); bolt_b.clicked.connect(lambda: threading.Thread(target=run_bolt_pair, args=(lambda msg: self.bolt_msg.emit(msg),), daemon=True).start()); row.addWidget(bolt_b)
+        bt_b = QPushButton("Bluetooth"); bt_b.setObjectName("SecondaryBtn"); bt_b.clicked.connect(lambda: subprocess.Popen(("bash", "-c", "blueman-manager || cinnamon-settings bluetooth"))); row.addWidget(bt_b)
         cl_b = QPushButton("Schließen"); cl_b.setObjectName("SecondaryBtn"); cl_b.clicked.connect(ov.deleteLater); row.addWidget(cl_b); cl.addLayout(row); ov.show()
+
     def _shift_carousel(self, delta):
         self.carousel_offset = max(0, min(max(0, len(self.connected) - 3), self.carousel_offset + delta)); self._refresh_picker_cards(animate=True)
     def _refresh_picker_cards(self, animate=True):
@@ -269,7 +287,7 @@ class LitioOptionlessWindow(QMainWindow):
         logo = QLabel("litio"); logo.setStyleSheet("font-size: 20px; font-weight: 900; color: #C084FC;"); bl.addWidget(logo); bl.addStretch()
         self.foot_dev_lbl = QLabel(self.active_dev["name"]); self.foot_dev_lbl.setStyleSheet("font-weight: 600;"); bl.addWidget(self.foot_dev_lbl)
         self.foot_pill = DeviceStatusPill(self.active_dev["conn"], self.active_dev["battery"]); bl.addWidget(self.foot_pill)
-        ad = QPushButton("GERÄT HINZUFÜGEN"); ad.setObjectName("SecondaryBtn"); ad.clicked.connect(lambda: subprocess.Popen(["solaar", "pair"])); bl.addWidget(ad); ml.addWidget(bot); return w
+        ad = QPushButton("GERÄT HINZUFÜGEN"); ad.setObjectName("SecondaryBtn"); ad.clicked.connect(self.open_add_device_overlay); bl.addWidget(ad); ml.addWidget(bot); return w
     def build_mouse_tab(self):
         p = QWidget(); l = QHBoxLayout(p); l.setContentsMargins(24, 18, 24, 18); l.setSpacing(20)
         self.mouse_vis = MouseVisualWidget(self.select_slot); l.addWidget(self.mouse_vis, 3)
