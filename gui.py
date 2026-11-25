@@ -217,7 +217,15 @@ class LitioOptionlessWindow(QMainWindow):
         vl.addStretch(); vl.addWidget(self.carousel_stage, 0, Qt.AlignmentFlag.AlignCenter); vl.addStretch()
         self._refresh_picker_cards(animate=False)
         self.scan_timer = QTimer(self); self.scan_timer.timeout.connect(self._poll_devices); self.scan_timer.start(2200)
-        foot = QHBoxLayout(); foot.addStretch(); ab = QPushButton("+ Gerät hinzufügen"); ab.setObjectName("SecondaryBtn"); ab.clicked.connect(lambda: subprocess.Popen(["solaar", "pair"])); foot.addWidget(ab); foot.addStretch(); vl.addLayout(foot); return w
+        foot = QHBoxLayout(); foot.addStretch(); ab = QPushButton("+ Gerät hinzufügen"); ab.setObjectName("SecondaryBtn"); ab.clicked.connect(self.open_add_device_overlay); foot.addWidget(ab); foot.addStretch(); vl.addLayout(foot); return w
+    def open_add_device_overlay(self):
+        ov = QFrame(self); ov.setGeometry(0, 0, self.width(), self.height()); ov.setStyleSheet("background-color: rgba(12, 10, 18, 215);")
+        card = QFrame(ov); card.setObjectName("Card"); card.setFixedSize(520, 290); card.move((self.width() - 520) // 2, (self.height() - 290) // 2)
+        cl = QVBoxLayout(card); cl.setContentsMargins(24, 22, 24, 22); cl.setSpacing(14)
+        h = QLabel("+ Logitech-Maus verbinden"); h.setStyleSheet("font-size: 17px; font-weight: 700; color: #C084FC; background: transparent;"); cl.addWidget(h)
+        info = QLabel("1. Halte die Easy-Switch-Taste (1 / 2 / 3) unter deiner Maus 3 Sekunden gedrückt, bis die LED schnell blinkt.\n\n2. Öffne die Bluetooth-Kopplung oder stecke deinen Logi Bolt / Unifying-Empfänger ein — Litio erkennt die Maus danach automatisch im Karussell."); info.setWordWrap(True); info.setStyleSheet("color: #E8E3F2; background: transparent;"); cl.addWidget(info); cl.addStretch()
+        row = QHBoxLayout(); bt_b = QPushButton("Bluetooth-Kopplung öffnen"); bt_b.setObjectName("AccentBtn"); bt_b.clicked.connect(lambda: subprocess.Popen(["bash", "-c", "blueman-manager || cinnamon-settings bluetooth"])); row.addWidget(bt_b)
+        cl_b = QPushButton("Schließen"); cl_b.setObjectName("SecondaryBtn"); cl_b.clicked.connect(ov.deleteLater); row.addWidget(cl_b); cl.addLayout(row); ov.show()
     def _shift_carousel(self, delta):
         self.carousel_offset = max(0, min(max(0, len(self.connected) - 3), self.carousel_offset + delta)); self._refresh_picker_cards(animate=True)
     def _refresh_picker_cards(self, animate=True):
