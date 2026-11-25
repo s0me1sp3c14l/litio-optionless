@@ -140,7 +140,7 @@ def scan_devs(known):
         except Exception: pass
 
 def run():
-    d = LitioDaemon(); known = {}; hw_acc = 0
+    d = LitioDaemon(); known = {}; hw_acc = 0; last_f_thumb = 0.0
     while True:
         scan_devs(known)
         if not known: time.sleep(1.0); continue
@@ -150,12 +150,16 @@ def run():
                 try:
                     for ev in dev.read():
                         if ev.type == evdev.ecodes.EV_KEY and ev.code in KEY_SLOTS and ev.value in (0, 1):
+                            if ev.code in (evdev.ecodes.KEY_F17, evdev.ecodes.KEY_F18):
+                                last_f_thumb = time.monotonic(); hw_acc = 0
                             d.handle_slot(KEY_SLOTS[ev.code], ev.value == 1)
                         elif ev.type == evdev.ecodes.EV_REL and ev.code == 12 and ev.value != 0:
+                            if time.monotonic() - last_f_thumb < 0.5:
+                                hw_acc = 0; continue
                             hw_acc += ev.value
-                            while abs(hw_acc) >= 75:
-                                d.handle_slot("thumb_up" if hw_acc < 0 else "thumb_down", True)
-                                hw_acc += 75 if hw_acc < 0 else -75
+                            while abs(hw_acc) >= 120:
+                                d.handle_slot("thumb_down" if hw_acc < 0 else "thumb_up", True)
+                                hw_acc += 120 if hw_acc < 0 else -120
                 except OSError: known.pop(dev.path, None)
         except Exception: known.clear(); time.sleep(0.5)
 
