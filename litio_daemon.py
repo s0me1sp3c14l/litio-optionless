@@ -1,11 +1,13 @@
-import re
 #!/usr/bin/env python3
-import os, json, time, select, threading, subprocess, evdev
+import os, sys, re, json, signal, time, select, threading, subprocess, evdev
 from pynput import mouse, keyboard
+
+sys.path.insert(0, "/opt/ai-workspace/litio-optionless")
+import haptic_mx4
 
 CONFIG_DIR = os.path.expanduser("~/.config/litio-optionless")
 PROFILES_FILE = os.path.join(CONFIG_DIR, "profiles.json")
-KEY_SLOTS = {evdev.ecodes.KEY_F13: "gesture_click", evdev.ecodes.KEY_F14: "back", evdev.ecodes.KEY_F15: "forward", evdev.ecodes.KEY_F16: "middle_click", evdev.ecodes.KEY_F17: "thumb_up", evdev.ecodes.KEY_F18: "thumb_down", evdev.ecodes.KEY_F19: "mode_shift"}
+KEY_SLOTS = {evdev.ecodes.KEY_F13: "gesture_click", evdev.ecodes.KEY_F14: "back", evdev.ecodes.KEY_F15: "forward", evdev.ecodes.KEY_F16: "middle_click", evdev.ecodes.KEY_F17: "thumb_up", evdev.ecodes.KEY_F18: "thumb_down", evdev.ecodes.KEY_F19: "mode_shift", evdev.ecodes.KEY_F20: "haptic_panel"}
 HOLD_MAP = {"Control_L": keyboard.Key.ctrl_l, "Control_R": keyboard.Key.ctrl_r, "Shift_L": keyboard.Key.shift_l, "Shift_R": keyboard.Key.shift_r, "Alt_L": keyboard.Key.alt_l, "Alt_R": keyboard.Key.alt_r, "Super_L": keyboard.Key.cmd}
 KB = keyboard.Controller()
 
@@ -14,8 +16,22 @@ def ensure_config():
     if not os.path.exists(PROFILES_FILE):
         json.dump({"language": "de", "volume_step": 3, "profiles": {"Global (Standard)": {"buttons": {}, "gestures": {}}}}, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2)
 
+def active_wm_class():
+    try:
+        wid = subprocess.check_output(["xdotool", "getactivewindow"], stderr=subprocess.DEVNULL).decode().strip()
+        return subprocess.check_output(["xprop", "-id", wid, "WM_CLASS"], stderr=subprocess.DEVNULL).decode().lower()
+    except Exception: return ""
+
 def send_combo(sc):
-    if sc.lower() in ("xf86audioplay","xf86audioprev","xf86audionext"): subprocess.Popen(["playerctl", "-a", {"xf86audioplay":"play-pause","xf86audioprev":"previous","xf86audionext":"next"}[sc.lower()]]); return
+    if sc.lower() in ("xf86audioplay","xf86audioprev","xf86audionext"):
+        cmd = {"xf86audioplay":"play-pause","xf86audioprev":"previous","xf86audionext":"next"}[sc.lower()]
+        pls = subprocess.getoutput("playerctl -l 2>/dev/null").splitlines()
+        wm = active_wm_class()
+        keys = ["firefox", "chromium", "chrome", "brave", "vivaldi", "spotify", "rhythmbox", "vlc", "mpv"]
+        fg = next((k for k in keys if k in wm), None)
+        target = next((x for x in pls if fg and fg in x.lower()), None) if fg else None
+        if not target: target = next((x for x in pls if "rhythmbox" in x.lower()), None)
+        subprocess.Popen(["playerctl", "-p", target, cmd] if target else ["playerctl", cmd]); return
     parts = [p.strip() for p in sc.split("+") if p.strip()]
     mod_map = {"ctrl": keyboard.Key.ctrl_l, "control_l": keyboard.Key.ctrl_l, "alt": keyboard.Key.alt_l, "alt_l": keyboard.Key.alt_l, "shift": keyboard.Key.shift_l, "super_l": keyboard.Key.cmd}
     sp_map = {"up": keyboard.Key.up, "down": keyboard.Key.down, "left": keyboard.Key.left, "right": keyboard.Key.right, "return": keyboard.Key.enter, "escape": keyboard.Key.esc, "tab": keyboard.Key.tab, "backspace": keyboard.Key.backspace, "delete": keyboard.Key.delete, "space": keyboard.Key.space, "plus": "+", "minus": "-", "percent": "%", "bracketleft": "[", "bracketright": "]", "xf86audioprev": keyboard.Key.media_previous, "xf86audionext": keyboard.Key.media_next, "xf86audioplay": keyboard.Key.media_play_pause}
@@ -26,13 +42,10 @@ def send_combo(sc):
     last = parts[-1] if parts else ""
     try:
         if last == "%" or last.lower() == "percent":
-            KB.press(keyboard.Key.shift_l); time.sleep(0.012)
-            KB.press("5"); time.sleep(0.012); KB.release("5")
-            time.sleep(0.012); KB.release(keyboard.Key.shift_l)
+            KB.press(keyboard.Key.shift_l); time.sleep(0.012); KB.press("5"); time.sleep(0.012); KB.release("5"); time.sleep(0.012); KB.release(keyboard.Key.shift_l)
         else:
             key_obj = sp_map.get(last.lower()) or (getattr(keyboard.Key, last.lower()) if last.lower().startswith("f") and last[1:].isdigit() else (last if len(last) == 1 else None))
-            if key_obj:
-                KB.press(key_obj); time.sleep(0.01); KB.release(key_obj)
+            if key_obj: KB.press(key_obj); time.sleep(0.01); KB.release(key_obj)
     finally:
         for mk in reversed(held):
             try: KB.release(mk)
@@ -40,35 +53,21 @@ def send_combo(sc):
         try: KB.release(keyboard.Key.shift_l); KB.release(keyboard.Key.shift_r)
         except Exception: pass
 
-_vol_pending = 0
-_vol_running = False
-_vol_lock = threading.Lock()
-def _queue_fine_vol(delta):
-    global _vol_pending, _vol_running
-    with _vol_lock:
-        _vol_pending += delta
-        if _vol_running: return
-        _vol_running = True
-    def _worker():
-        global _vol_pending, _vol_running
-        try:
-            with _vol_lock:
-                d_val = max(-6, min(6, _vol_pending)); _vol_pending = 0
-            if d_val != 0:
-                out = subprocess.check_output(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], stderr=subprocess.DEVNULL).decode()
-                m = re.search(r"(\d+)%", out)
-                cur_v = int(m.group(1)) if m else 50
-                new_v = max(0, min(150, cur_v + d_val))
-                subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{new_v}%"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                osd_v = min(100, int(round(new_v * 100 / 150)))
-                ico = "audio-volume-muted" if new_v == 0 else ("audio-volume-low" if new_v < 50 else ("audio-volume-medium" if new_v < 105 else "audio-volume-high"))
-                subprocess.Popen(["gdbus", "call", "--session", "--dest", "org.Cinnamon", "--object-path", "/org/Cinnamon", "--method", "org.Cinnamon.ShowOSD", f"{{'icon': <'{ico}'>, 'level': <int32 {osd_v}>}}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        finally:
-            with _vol_lock: _vol_running = False
-    threading.Thread(target=_worker, daemon=True).start()
-
 def execute_action(sc, step=3, pressed=True):
     if not sc or sc in ("none", "gesture_mode", "smartshift_toggle"): return
+    if sc == "orbit_ring":
+        pid_f = "/tmp/litio_orbit.pid"
+        if pressed:
+            if os.path.exists(pid_f):
+                try: os.kill(int(open(pid_f).read().strip()), signal.SIGTERM)
+                except Exception: pass
+                return
+            execute_action._orb_t0 = time.monotonic()
+            subprocess.Popen([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "orbit_ring.py")])
+        elif os.path.exists(pid_f) and time.monotonic() - getattr(execute_action, "_orb_t0", 0.0) >= 0.25:
+            try: os.kill(int(open(pid_f).read().strip()), signal.SIGUSR1)
+            except Exception: pass
+        return
     if sc in HOLD_MAP:
         KB.press(HOLD_MAP[sc]) if pressed else KB.release(HOLD_MAP[sc]); return
     if not pressed: return
@@ -82,12 +81,6 @@ def execute_action(sc, step=3, pressed=True):
     elif sc in ("%", "percent"): subprocess.Popen(["xdotool", "key", "--clearmodifiers", "percent"])
     else: send_combo(sc)
 
-def active_wm_class():
-    try:
-        wid = subprocess.check_output(["xdotool", "getactivewindow"], stderr=subprocess.DEVNULL).decode().strip()
-        return subprocess.check_output(["xprop", "-id", wid, "WM_CLASS"], stderr=subprocess.DEVNULL).decode().lower()
-    except Exception: return ""
-
 class LitioDaemon:
     def __init__(self):
         ensure_config(); self.m_ctrl = mouse.Controller(); self.gest_starts, self.last_tap, self.gest_fired = {}, {}, {}
@@ -98,6 +91,7 @@ class LitioDaemon:
                 return cfg, pd, cfg["profiles"].get("Global (Standard)", {})
         gl = cfg.get("profiles", {}).get("Global (Standard)", {}); return cfg, gl, gl
     def handle_slot(self, slot, pressed):
+        print("SLOT:", slot, pressed, flush=True)
         cfg, pd, gl = self.get_profile(); sc = pd.get("buttons", {}).get(slot) or gl.get("buttons", {}).get(slot, "")
         if sc == "gesture_mode":
             gcfg = (pd.get("gestures", {}).get(slot) if pd.get("gestures", {}).get(slot) else None) or gl.get("gestures", {}).get(slot) or {}
@@ -112,17 +106,13 @@ class LitioDaemon:
                         if abs(dx) >= 36 or abs(dy) >= 36:
                             dr = ("right" if dx > 0 else "left") if abs(dx) > abs(dy) else ("down" if dy > 0 else "up")
                             act = gc.get(dr, "")
-                            if act in cont:
-                                self.gest_fired[s] = True; execute_action(act, st, True); self.gest_starts[s] = (ex, ey)
-                            elif abs(dx) >= 48 or abs(dy) >= 48:
-                                self.gest_fired[s] = True; execute_action(act, st, True); break
+                            if act in cont: self.gest_fired[s] = True; execute_action(act, st, True); self.gest_starts[s] = (ex, ey)
+                            elif abs(dx) >= 48 or abs(dy) >= 48: self.gest_fired[s] = True; execute_action(act, st, True); break
                 threading.Thread(target=_track, daemon=True).start()
             else:
-                self.gest_starts.pop(slot, None)
-                now = time.monotonic()
+                self.gest_starts.pop(slot, None); now = time.monotonic()
                 if not self.gest_fired.pop(slot, False) and gcfg.get("click") and now - self.last_tap.get(slot + "_clk", 0.0) >= 0.35:
-                    self.last_tap[slot + "_clk"] = now
-                    execute_action(gcfg.get("click", ""), cfg.get("volume_step", 3), True)
+                    self.last_tap[slot + "_clk"] = now; execute_action(gcfg.get("click", ""), cfg.get("volume_step", 3), True)
         else:
             if pressed and sc not in HOLD_MAP:
                 now = time.monotonic()
@@ -131,18 +121,15 @@ class LitioDaemon:
             eff_sc = ("fine_vol_up" if sc == "XF86AudioRaiseVolume" else ("fine_vol_down" if sc == "XF86AudioLowerVolume" else sc)) if slot.startswith("thumb_") else sc
             execute_action(eff_sc, cfg.get("volume_step", 3), pressed)
 
-def scan_devs(known):
-    for p in evdev.list_devices():
-        if p in known: continue
-        try:
-            dev = evdev.InputDevice(p)
-            if any(k in dev.name.lower() for k in ("logiops", "virtual", "mx master", "usb receiver mouse", "consumer control")): known[p] = dev
-        except Exception: pass
-
 def run():
-    d = LitioDaemon(); known = {}; hw_acc = 0; last_f_thumb = 0.0
+    d = LitioDaemon(); haptic_mx4.start_mx4_bridge(d.handle_slot); known = {}; hw_acc = 0; last_f_thumb = 0.0
     while True:
-        scan_devs(known)
+        for p in evdev.list_devices():
+            if p not in known:
+                try:
+                    dev = evdev.InputDevice(p)
+                    if any(k in dev.name.lower() for k in ("logiops", "virtual", "mx master", "usb receiver mouse", "consumer control")): known[p] = dev
+                except Exception: pass
         if not known: time.sleep(1.0); continue
         try:
             r, _, _ = select.select(list(known.values()), [], [], 1.0)
@@ -150,18 +137,18 @@ def run():
                 try:
                     for ev in dev.read():
                         if ev.type == evdev.ecodes.EV_KEY and ev.code in KEY_SLOTS and ev.value in (0, 1):
-                            if ev.code in (evdev.ecodes.KEY_F17, evdev.ecodes.KEY_F18):
-                                last_f_thumb = time.monotonic(); hw_acc = 0
+                            if ev.code in (evdev.ecodes.KEY_F17, evdev.ecodes.KEY_F18): last_f_thumb = time.monotonic(); hw_acc = 0
                             d.handle_slot(KEY_SLOTS[ev.code], ev.value == 1)
                         elif ev.type == evdev.ecodes.EV_REL and ev.code == 12 and ev.value != 0:
-                            if time.monotonic() - last_f_thumb < 0.5:
-                                hw_acc = 0; continue
+                            if time.monotonic() - last_f_thumb < 0.5: hw_acc = 0; continue
                             hw_acc += ev.value
                             while abs(hw_acc) >= 120:
-                                d.handle_slot("thumb_up" if hw_acc < 0 else "thumb_down", True)
-                                hw_acc += 120 if hw_acc < 0 else -120
+                                d.handle_slot("thumb_up" if hw_acc < 0 else "thumb_down", True); hw_acc += 120 if hw_acc < 0 else -120
                 except OSError: known.pop(dev.path, None)
         except Exception: known.clear(); time.sleep(0.5)
 
 if __name__ == "__main__":
+    import fcntl; _lk = open("/tmp/litio_daemon.lock", "w")
+    try: fcntl.flock(_lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError: sys.exit(0)
     run()

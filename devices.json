@@ -42,11 +42,12 @@
   "MX Master 4": {
     "logid_name": "MX Master 4",
     "cids": {
+      "haptic_panel": "0x1a0",
       "gesture": "0xc3",
       "back": "0x53",
       "forward": "0x56",
       "middle": "0x52",
-      "mode_shift": "0xd7"
+      "mode_shift": "0xc4"
     }
   }
 }

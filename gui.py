@@ -1,3 +1,5 @@
+import sys; sys.path.insert(0, "/opt/ai-workspace/litio-optionless")
+import haptic_mx4
 #!/usr/bin/env python3
 import sys, os, re, json, datetime, subprocess, xml.etree.ElementTree as ET
 from PyQt6.QtWidgets import (
@@ -19,12 +21,13 @@ PROFILES_FILE = os.path.join(CONFIG_DIR, "profiles.json")
 DEVICES_FILE = os.path.join(APP_DIR, "devices.json")
 ANCHORS_FILE = os.path.join(APP_DIR, "callout_anchors.json")
 MODEL_ORDER = ["MX Master", "MX Master 2S", "MX Master 3", "MX Master 3S", "MX Master 4"]
-ACTION_LABELS = {"gesture_click": "Daumen-Gestentaste", "back": "Zurück-Taste", "forward": "Vorwärts-Taste", "thumb_up": "Daumenrad Hoch", "thumb_down": "Daumenrad Runter", "middle_click": "Scrollrad-Klick", "mode_shift": "Modus-Taste"}
-PRESET_SHORTCUTS = [("Benutzerdefiniert...", ""), ("Gestentaste (4 Maus-Richtungen)", "gesture_mode"), ("Mausrad-Modus (Freilauf / Raster)", "smartshift_toggle"), ("Horizontal Scrollen Links (◀)", "hscroll_left"), ("Horizontal Scrollen Rechts (▶)", "hscroll_right"), ("Lautstärke Hoch", "XF86AudioRaiseVolume"), ("Lautstärke Runter", "XF86AudioLowerVolume"), ("Ton Stumm", "XF86AudioMute"), ("Play / Pause", "XF86AudioPlay"), ("Vorheriger Track (Media Prev)", "XF86AudioPrev"), ("Nächster Track (Media Next)", "XF86AudioNext"), ("Fenster wechseln (Alt+Tab)", "alt+tab"), ("Desktop links wechseln", "ctrl+alt+left"), ("Desktop rechts wechseln", "ctrl+alt+right"), ("Helligkeit Hoch", "XF86MonBrightnessUp"), ("Helligkeit Runter", "XF86MonBrightnessDown"), ("Ausschneiden (Strg+X)", "ctrl+x"), ("Rückgängig (Strg+Z)", "ctrl+z"), ("Fenster maximieren", "alt+F10"), ("Fenster minimieren", "window_minimize"), ("Super / Startmenü", "Super_L"), ("Computer sperren", "system_lock"), ("Computer Standby", "system_suspend"), ("Global übernehmen (Standard)", ""), ("Deaktiviert / Natives Verhalten", "none")]
-SUB_PRESET_SHORTCUTS = [p for p in PRESET_SHORTCUTS if p[1] != "gesture_mode"]
+ACTION_LABELS = {"gesture_click": "Daumen-Gestentaste", "back": "Zurück-Taste", "forward": "Vorwärts-Taste", "thumb_up": "Daumenrad Hoch", "thumb_down": "Daumenrad Runter", "middle_click": "Scrollrad-Klick", "mode_shift": "Modus-Taste", "haptic_panel": "Haptik-Panel"}
+PRESET_SHORTCUTS = [("Benutzerdefiniert...", ""), ("Gestentaste (4 Maus-Richtungen)", "gesture_mode"), ("Orbit-Ring (Radial-Menü)", "orbit_ring"), ("Mausrad-Modus (Freilauf / Raster)", "smartshift_toggle"), ("Horizontal Scrollen Links (◀)", "hscroll_left"), ("Horizontal Scrollen Rechts (▶)", "hscroll_right"), ("Lautstärke Hoch", "XF86AudioRaiseVolume"), ("Lautstärke Runter", "XF86AudioLowerVolume"), ("Ton Stumm", "XF86AudioMute"), ("Play / Pause", "XF86AudioPlay"), ("Vorheriger Track (Media Prev)", "XF86AudioPrev"), ("Nächster Track (Media Next)", "XF86AudioNext"), ("Fenster wechseln (Alt+Tab)", "alt+tab"), ("Desktop links wechseln", "ctrl+alt+left"), ("Desktop rechts wechseln", "ctrl+alt+right"), ("Helligkeit Hoch", "XF86MonBrightnessUp"), ("Helligkeit Runter", "XF86MonBrightnessDown"), ("Kopieren (Strg+C)", "ctrl+c"), ("Einfügen (Strg+V)", "ctrl+v"), ("Ausschneiden (Strg+X)", "ctrl+x"), ("Rückgängig (Strg+Z)", "ctrl+z"), ("Fenster maximieren", "alt+F10"), ("Fenster minimieren", "window_minimize"), ("Super / Startmenü", "Super_L"), ("Computer sperren", "system_lock"), ("Computer Standby", "system_suspend"), ("Global übernehmen (Standard)", ""), ("Deaktiviert / Natives Verhalten", "none")]
+SUB_PRESET_SHORTCUTS = [p for p in PRESET_SHORTCUTS if p[1] not in ("gesture_mode", "orbit_ring")]
 
 STYLESHEET = """
-QMainWindow, QWidget { background-color: #14121A; color: #F3F0F8; font-family: 'Segoe UI', 'Ubuntu', sans-serif; font-size: 13px; }
+QMainWindow, QToolTip { background-color: #231E30; color: #F4F0FA; border: 1px solid #9333EA; padding: 6px 8px; border-radius: 6px; font-size: 12px; }
+QWidget { background-color: #14121A; color: #F3F0F8; font-family: 'Segoe UI', 'Ubuntu', sans-serif; font-size: 13px; }
 QFrame#TopBar { background-color: #1A1724; border-bottom: 1px solid #2C273A; }
 QFrame#BottomBar { background-color: #110F17; border-top: 1px solid #2C273A; }
 QFrame#Card { background-color: #1C1926; border-radius: 14px; border: 1px solid #2E293D; }
@@ -183,7 +186,7 @@ class MouseVisualWidget(QWidget):
     def __init__(self, on_sel, parent=None):
         super().__init__(parent); self.on_sel, self.sel_slot, self.model = on_sel, "gesture_click", "MX Master 3S"; self.setMinimumSize(560, 440)
         self.anchors = json.load(open(ANCHORS_FILE, encoding="utf-8")) if os.path.exists(ANCHORS_FILE) else {}
-        self.slots = {"forward": ("left", 55, "thfwd", 0.20, 0.47), "back": ("left", 125, "thback", 0.20, 0.54), "thumb_up": ("left", 205, "thumbwheel", 0.28, 0.48), "thumb_down": ("left", 275, "thumbwheel", 0.28, 0.50), "gesture_click": ("left", 355, "thmb_gest", 0.09, 0.59), "middle_click": ("right", 90, "scrollwheel", 0.61, 0.21), "mode_shift": ("right", 190, "modeswitch", 0.62, 0.39)}
+        self.slots = {"forward": ("left", 68, "thfwd", 0.20, 0.47), "back": ("left", 118, "thback", 0.20, 0.54), "thumb_up": ("left", 188, "thumbwheel", 0.28, 0.48), "thumb_down": ("left", 238, "thumbwheel", 0.28, 0.50), "gesture_click": ("left", 315, "thmb_gest", 0.09, 0.59), "middle_click": ("right", 90, "scrollwheel", 0.61, 0.21), "mode_shift": ("right", 180, "modeswitch", 0.62, 0.39), "haptic_panel": ("bottom", 392, "haptic", 0.14, 0.68)}
         self.btns = {}
         for slot, (side, y, _, _, _) in self.slots.items():
             b = QPushButton(ACTION_LABELS[slot], self); b.setObjectName("HotspotBtn"); b.setFixedSize(b.sizeHint().width() + 24, 32); b.clicked.connect(lambda _, sl=slot: self.select_slot(sl)); self.btns[slot] = b
@@ -272,6 +275,7 @@ class LitioOptionlessWindow(QMainWindow):
         if fresh != self.connected: self.connected = fresh; self._refresh_picker_cards(animate=True)
     def open_device(self, dev):
         self.active_dev = dev; self.mouse_vis.set_model(dev["name"]); self.foot_dev_lbl.setText(dev["name"]); self.foot_pill.set_status(dev["conn"], dev["battery"])
+        if hasattr(self, "mx4_box"): self.mx4_box.setVisible(dev["name"] == "MX Master 4" and self.current_slot == "haptic_panel")
         self.on_profile_changed(self.current_profile); self.root_stack.setCurrentIndex(1)
     def build_config_screen(self):
         w = QWidget(); ml = QVBoxLayout(w); ml.setContentsMargins(0, 0, 0, 0); ml.setSpacing(0)
@@ -296,12 +300,80 @@ class LitioOptionlessWindow(QMainWindow):
         self.preset_combo = QComboBox()
         for lbl, sc in PRESET_SHORTCUTS: self.preset_combo.addItem(lbl, sc)
         self.preset_combo.currentIndexChanged.connect(lambda i: self.shortcut_edit.setText(self.preset_combo.itemData(i)) if i > 0 else None); rl.addWidget(self.preset_combo)
-        self.shortcut_edit = ShortcutRecorderEdit(); self.shortcut_edit.textChanged.connect(lambda t: self.gest_box.setVisible(t.strip() == "gesture_mode")); rl.addWidget(self.shortcut_edit)
+        self.shortcut_edit = ShortcutRecorderEdit(); self.shortcut_edit.textChanged.connect(lambda x: (self.gest_box.setVisible(x.strip() == "gesture_mode"), self.orbit_box.setVisible(x.strip() == "orbit_ring"))); rl.addWidget(self.shortcut_edit)
+        self.orbit_box = QPushButton("⚙ Orbit-Ring konfigurieren…"); self.orbit_box.setObjectName("SecondaryBtn"); self.orbit_box.clicked.connect(self.open_orbit_overlay); self.orbit_box.setVisible(False); rl.addWidget(self.orbit_box)
         self.gest_box = QPushButton("⚙ 4-Wege-Gesten konfigurieren…"); self.gest_box.setObjectName("SecondaryBtn"); self.gest_box.clicked.connect(self.open_gesture_overlay)
         self.gest_values = {"up": "", "down": "", "left": "", "right": "", "click": ""}; self.gest_box.setVisible(False); rl.addWidget(self.gest_box)
         self.wm_class_edit = QLineEdit(); self.wm_class_edit.setPlaceholderText("WM_CLASS (z.B. inkscape, firefox)"); rl.addWidget(self.wm_class_edit)
         sb = QPushButton("Belegung speichern"); sb.setObjectName("AccentBtn"); sb.clicked.connect(self.save_current_slot); rl.addWidget(sb)
-        self.ov_box = QLabel(""); self.ov_box.setStyleSheet("background-color: #100E15; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 11px; color: #C084FC;"); self.ov_box.setWordWrap(True); rl.addWidget(self.ov_box); rl.addStretch(); l.addWidget(right); return p
+        self.ov_box = QLabel(""); self.ov_box.setStyleSheet("background-color: #100E15; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 11px; color: #C084FC;"); self.ov_box.setWordWrap(True); rl.addWidget(self.ov_box)
+        self.mx4_box = QWidget(); self.mx4_box.setStyleSheet("background: transparent; border: none;")
+        ml4 = QVBoxLayout(self.mx4_box); ml4.setContentsMargins(0, 6, 0, 0); ml4.setSpacing(8)
+        hlbl = QLabel("Haptik & Druck"); hlbl.setStyleSheet("font-size: 15px; font-weight: 700; color: #C084FC;"); ml4.addWidget(hlbl)
+        hc = self.config.get("mx4_haptic", {"level": 60, "pattern": 1, "force": 4646})
+        r1 = QHBoxLayout(); self.h_lvl = QSlider(Qt.Orientation.Horizontal); self.h_lvl.setRange(0, 100); self.h_lvl.setValue(hc.get("level", 60))
+        self.h_pat = QComboBox(); [self.h_pat.addItem(f"Muster {i}", i) for i in range(15)]; self.h_pat.setCurrentIndex(hc.get("pattern", 1))
+        hb = QPushButton("Test"); hb.setObjectName("SecondaryBtn"); hb.clicked.connect(self._apply_mx4_haptic)
+        r1.addWidget(QLabel("Stärke:")); r1.addWidget(self.h_lvl); r1.addWidget(self.h_pat); r1.addWidget(hb); ml4.addLayout(r1)
+        r2 = QHBoxLayout(); self.f_thr = QSlider(Qt.Orientation.Horizontal); self.f_thr.setRange(1000, 8900); self.f_thr.setValue(hc.get("force", 4646))
+        self.f_thr.sliderReleased.connect(self._apply_mx4_haptic)
+        r2.addWidget(QLabel("Panel-Druck:")); r2.addWidget(self.f_thr); ml4.addLayout(r2)
+        self.mx4_box.setVisible(self.active_dev.get("name") == "MX Master 4"); rl.addWidget(self.mx4_box); rl.addStretch(); l.addWidget(right); return p
+    def _apply_mx4_haptic(self):
+        lv, pat, frc = self.h_lvl.value(), self.h_pat.currentData(), self.f_thr.value()
+        self.config["mx4_haptic"] = {"level": lv, "pattern": pat, "force": frc}
+        json.dump(self.config, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2)
+        def _send_h():
+            import time
+            haptic_mx4.set_haptic_level(lv > 0, lv); time.sleep(0.05)
+            haptic_mx4.set_force_threshold(frc); time.sleep(0.05)
+            haptic_mx4.play_haptic(pat)
+        import threading; threading.Thread(target=_send_h, daemon=True).start()
+
+    def open_orbit_overlay(self):
+        import orbit_ring, copy
+        ov = QFrame(self); ov.setGeometry(0, 0, self.width(), self.height()); ov.setStyleSheet("background-color: rgba(12, 10, 18, 220);")
+        card = QFrame(ov); card.setObjectName("Card"); card.setFixedSize(720, 430); card.move((self.width() - 720) // 2, (self.height() - 430) // 2)
+        cl = QVBoxLayout(card); cl.setContentsMargins(24, 20, 24, 20); cl.setSpacing(14)
+        hdr = QLabel("Orbit-Ring konfigurieren"); hdr.setStyleSheet("font-size: 17px; font-weight: 700; color: #C084FC; background: transparent;"); cl.addWidget(hdr)
+        slots = copy.deepcopy(self.config.get("orbit_ring", orbit_ring.DEFAULT_SLOTS))
+        while len(slots) < 8: slots.append({"icon": "•", "label": "", "action": ""})
+        body = QHBoxLayout(); body.setSpacing(24)
+        ctrl = QVBoxLayout(); ctrl.setSpacing(10)
+        dirs = ["↑ Oben", "↗ Oben-Rechts", "→ Rechts", "↘ Unten-Rechts", "↓ Unten", "↙ Unten-Links", "← Links", "↖ Oben-Links"]
+        dlbl = QLabel("Bubble 1: ↑ Oben"); dlbl.setStyleSheet("color: #E8E3F2; font-weight: 600; background: transparent;"); ctrl.addWidget(dlbl)
+        r_top = QHBoxLayout(); ic_cb = QComboBox(); ic_cb.setFixedWidth(64)
+        for ic in ["📋", "📥", "✂️", "↩️", "⏯", "⏭", "⏮", "🔇", "🔊", "🖥", "🗔", "🔒", "⚡", "🔍", "📁", "🌐", "🎨", "⚙️", "★"]: ic_cb.addItem(ic)
+        ie = QLineEdit(next(iter(slots)).get("icon", "•")); ie.setFixedWidth(44); ie.setPlaceholderText("Icon")
+        ic_cb.currentTextChanged.connect(ie.setText); r_top.addWidget(ic_cb)
+        le = QLineEdit(next(iter(slots)).get("label", "")); le.setPlaceholderText("Beschriftung")
+        r_top.addWidget(ie); r_top.addWidget(le); ctrl.addLayout(r_top)
+        ic_cb.setToolTip("Passendes Symbol aus der Liste wählen"); ie.setToolTip("Eigenes Emoji oder Zeichen eingeben"); le.setToolTip("Beschriftung der Bubble im Orbit-Ring")
+        pre = QComboBox(); pre.setToolTip("Vordefinierte Aktion auswählen")
+        for lbl, sc in SUB_PRESET_SHORTCUTS: pre.addItem(lbl, sc)
+        ctrl.addWidget(pre); ae = ShortcutRecorderEdit(); ae.setToolTip("Klicken und Tastenkombination drücken oder Befehl eingeben")
+        init_act = next(iter(slots)).get("action", ""); ae.setText(init_act)
+        idx0 = pre.findData(init_act); pre.setCurrentIndex(idx0 if idx0 > 0 else 0)
+        ctrl.addWidget(ae); ctrl.addStretch()
+        def _pick(i):
+            dlbl.setText(f"Bubble {i+1}: {dirs[i]}")
+            ie.blockSignals(True); le.blockSignals(True); ae.blockSignals(True)
+            ie.setText(slots[i].get("icon", "•")); le.setText(slots[i].get("label", "")); ae.setText(slots[i].get("action", ""))
+            idx = pre.findData(slots[i].get("action", "")); pre.blockSignals(True); pre.setCurrentIndex(idx if idx > 0 else 0); pre.blockSignals(False)
+            ie.blockSignals(False); le.blockSignals(False); ae.blockSignals(False)
+        pad = orbit_ring.OrbitVisualPad(slots, _pick); body.addWidget(pad)
+        ie.textChanged.connect(lambda v: (slots[pad.sel].update({"icon": v}), pad.update()))
+        le.textChanged.connect(lambda v: (slots[pad.sel].update({"label": v}), pad.update()))
+        ae.textChanged.connect(lambda v: slots[pad.sel].update({"action": v}))
+        pre.currentIndexChanged.connect(lambda i: ae.setText(pre.itemData(i)) if i > 0 else None)
+        body.addLayout(ctrl, 1); cl.addLayout(body)
+        br = QHBoxLayout(); br.addStretch()
+        def _save():
+            self.config["orbit_ring"] = slots; json.dump(self.config, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2); ov.deleteLater()
+        sb = QPushButton("Orbit speichern"); sb.setObjectName("AccentBtn"); sb.clicked.connect(_save)
+        cb = QPushButton("Abbrechen"); cb.setObjectName("SecondaryBtn"); cb.clicked.connect(ov.deleteLater)
+        br.addWidget(cb); br.addWidget(sb); cl.addLayout(br); ov.show()
+
     def open_gesture_overlay(self):
         ov = QFrame(self); ov.setGeometry(0, 0, self.width(), self.height()); ov.setStyleSheet("background-color: rgba(12, 10, 18, 215);")
         card = QFrame(ov); card.setObjectName("Card"); card.setFixedSize(740, 436); card.move((self.width() - 740) // 2, (self.height() - 436) // 2)
@@ -354,10 +426,11 @@ class LitioOptionlessWindow(QMainWindow):
     def on_profile_changed(self, name):
         self.current_profile = name; pd = self.config["profiles"].get(name, {}); self.wm_class_edit.setText(", ".join(pd.get("wm_classes", []))); self.wm_class_edit.setEnabled(name != "Global (Standard)"); self.select_slot(self.current_slot)
     def select_slot(self, slot):
-        self.current_slot = slot; self.slot_title.setText(ACTION_LABELS.get(slot, slot)); pd = self.config["profiles"].get(self.current_profile, {})
+        self.current_slot = slot; self.slot_title.setText(ACTION_LABELS.get(slot, slot))
+        if hasattr(self, "mx4_box"): self.mx4_box.setVisible(self.active_dev.get("name") == "MX Master 4" and slot == "haptic_panel"); pd = self.config["profiles"].get(self.current_profile, {})
         self.shortcut_edit.setText(pd.get("buttons", {}).get(slot, "")); idx = self.preset_combo.findData(self.shortcut_edit.text().strip()); self.preset_combo.blockSignals(True); self.preset_combo.setCurrentIndex(idx if idx > 0 else 0); self.preset_combo.blockSignals(False); gd = pd.get("gestures", {}).get(slot, {})
         self.gest_values = {k: (gd.get(k, "") if isinstance(gd, dict) else "") for k in ("up", "down", "left", "right", "click")}
-        btns = pd.get("buttons", {}); self.ov_box.setText("\n".join([f"{ACTION_LABELS.get(k, k)}: {btns.get(k, 'none')}" for k in ["gesture_click", "back", "forward", "thumb_up", "thumb_down", "middle_click", "mode_shift"]]))
+        btns = pd.get("buttons", {}); self.ov_box.setText("\n".join([f"{ACTION_LABELS.get(k, k)}: {btns.get(k, 'none')}" for k in ["haptic_panel", "gesture_click", "back", "forward", "thumb_up", "thumb_down", "middle_click", "mode_shift"]]))
     def save_current_slot(self):
         pd = self.config["profiles"][self.current_profile]
         if self.current_profile != "Global (Standard)": pd["wm_classes"] = [c.strip().lower() for c in self.wm_class_edit.text().split(",") if c.strip()]
