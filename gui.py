@@ -68,9 +68,6 @@ def query_connected_mice(devices_dict):
         if m in devices_dict and re.search(rf"\b{re.escape(m.lower())}\b", hid_text):
             found[m] = "Bolt / USB"
             hid_text = hid_text.replace(m.lower(), "")
-    if not found:
-        if "046d:c548" in raw_usb.lower() or "bolt receiver" in raw_usb.lower(): found["MX Master 3S"] = "Bolt / USB"
-        elif "046d:c52b" in raw_usb.lower() or "unifying" in raw_usb.lower(): found["MX Master 2S"] = "Bolt / USB"
     bt_low = raw_bt.lower()
     for m in reversed(MODEL_ORDER):
         if m in devices_dict and re.search(rf"\b{re.escape(m.lower())}\b", bt_low):
@@ -84,7 +81,7 @@ def query_connected_mice(devices_dict):
                     mm = re.search(r"percentage:\s*(\d+)%", ublk)
                     if mm: pct = int(mm.group(1))
             res.append({"name": m, "conn": found[m], "battery": pct})
-    return res if res else [{"name": "MX Master 3S", "conn": "Bolt / USB", "battery": 85}]
+    return res
 
 class DeviceStatusPill(QFrame):
     def __init__(self, conn="Bolt / USB", battery=85, parent=None):
@@ -217,7 +214,7 @@ class LitioOptionlessWindow(QMainWindow):
         self.devices = json.load(open(DEVICES_FILE, encoding="utf-8")) if os.path.exists(DEVICES_FILE) else {"MX Master 3S": {"logid_name": "MX Master 3S", "cids": {"gesture": "0xc3", "back": "0x53", "forward": "0x56", "middle": "0x52", "mode_shift": "0xd7"}}}
         os.makedirs(CONFIG_DIR, exist_ok=True); ensure_config()
         self.config = json.load(open(PROFILES_FILE, encoding="utf-8")) if os.path.exists(PROFILES_FILE) else {"language": "de", "profiles": {"Global (Standard)": {"buttons": {}}}}
-        self.connected = query_connected_mice(self.devices); self.active_dev = next(iter(self.connected)); self.current_profile, self.current_slot = "Global (Standard)", "gesture_click"
+        self.connected = query_connected_mice(self.devices); self.active_dev = next(iter(self.connected), {"name": "MX Master 4", "conn": "Keine", "battery": 0}); self.current_profile, self.current_slot = "Global (Standard)", "gesture_click"
         if subprocess.run(["pgrep", "-f", "[l]ogimx_daemon.py"], stdout=subprocess.DEVNULL).returncode != 0:
             subprocess.Popen(["python3", "-u", os.path.join(APP_DIR, "litio_daemon.py")], env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":0")}, stdout=open("/tmp/litio.log", "w"), stderr=subprocess.STDOUT)
         self.root_stack = QStackedWidget(); self.setCentralWidget(self.root_stack)
