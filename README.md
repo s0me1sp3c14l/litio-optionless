@@ -10,7 +10,7 @@ Modern PyQt6 desktop configurator and low-latency background daemon for multi-bu
 
 ## Quick Install (Debian / Ubuntu / Linux Mint)
 ```bash
-git clone https://github.coms0me1sp3c14l/litio-optionless.git
+git clone https://github.com/s0me1sp3c14l/litio-optionless.git
 cd litio-optionless
 ./install.sh
 ```
