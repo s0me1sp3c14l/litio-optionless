@@ -54,7 +54,9 @@ def send_combo(sc):
         except Exception: pass
 
 def execute_action(sc, step=3, pressed=True):
-    if not sc or sc in ("none", "gesture_mode", "smartshift_toggle"): return
+    if not sc or sc in ("none", "gesture_mode"): return
+    if sc == "smartshift_toggle" and pressed:
+        haptic_mx4.toggle_smartshift(); return
     if sc == "orbit_ring":
         pid_f = "/tmp/litio_orbit.pid"
         if pressed:

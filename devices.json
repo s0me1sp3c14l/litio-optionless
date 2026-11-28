@@ -6,7 +6,7 @@
       "back": "0x53",
       "forward": "0x56",
       "middle": "0x52",
-      "mode_shift": "0xd7"
+      "mode_shift": "0xc4"
     }
   },
   "MX Master 2S": {
@@ -16,7 +16,7 @@
       "back": "0x53",
       "forward": "0x56",
       "middle": "0x52",
-      "mode_shift": "0xd7"
+      "mode_shift": "0xc4"
     }
   },
   "MX Master 3": {

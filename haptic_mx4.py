@@ -78,3 +78,37 @@ def start_mx4_bridge(on_slot):
                 try: os.close(fd)
                 except Exception: pass
     threading.Thread(target=_loop, daemon=True).start()
+
+def _open_any_mx():
+    res = []
+    for p in sorted(glob.glob('/dev/hidraw*')):
+        b = os.path.basename(p)
+        u, r = f"/sys/class/hidraw/{b}/device/uevent", f"/sys/class/hidraw/{b}/device/report_descriptor"
+        if os.path.exists(u) and os.path.exists(r):
+            ut = open(u).read().upper()
+            if ("C548" in ut or "C52B" in ut) and b'\x06\x00\xff\x09\x02' in open(r, 'rb').read():
+                for sl in range(1, 7): res.append((p, sl))
+            elif "0000046D:0000B042" in ut or "0000046D:0000B019" in ut:
+                res.append((p, 0xFF))
+    return res
+
+def toggle_smartshift():
+    for path, sl in _open_any_mx():
+        try: fd = os.open(path, os.O_RDWR | os.O_NONBLOCK)
+        except Exception: continue
+        try:
+            for feat, fn_g, fn_s in ((0x2111, 1, 2), (0x2110, 0, 1)):
+                os.write(fd, bytes([0x11, sl, 0x00, 0x0A, (feat >> 8) & 0xFF, feat & 0xFF]) + bytes(14))
+                r = os.read(fd, 64) if select.select([fd], [], [], 0.15)[0] else None
+                if r and len(r) >= 5 and r[2] == 0x00 and r[4] != 0:
+                    idx = r[4]
+                    os.write(fd, bytes([0x11, sl, idx, (fn_g << 4) | 0x0A]) + bytes(16))
+                    cur = os.read(fd, 64) if select.select([fd], [], [], 0.15)[0] else None
+                    if cur and len(cur) >= 5:
+                        nxt = 1 if cur[4] == 2 else 2
+                        os.write(fd, bytes([0x11, sl, idx, (fn_s << 4) | 0x0A, nxt, 0x00, 0x00]) + bytes(13))
+                        select.select([fd], [], [], 0.15)
+                        return nxt
+        except Exception: pass
+        finally: os.close(fd)
+    return None

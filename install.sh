@@ -9,7 +9,7 @@ sudo cp -r ./* "$APP_DIR"/
 sudo chown -R "$USER:$USER" "$APP_DIR"
 sudo chmod +x "$APP_DIR/gui.py" "$APP_DIR/litio_daemon.py" "$APP_DIR/start.sh" "$APP_DIR/orbit_ring.py"
 sudo ln -sf "$APP_DIR/start.sh" /usr/local/bin/litio
-printf 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c548", MODE="0666"\nSUBSYSTEM=="hidraw", ENV{HID_ID}=="0005:0000046D:0000B042", MODE="0666"\n' | sudo tee /etc/udev/rules.d/99-litio-bolt.rules >/dev/null
+printf 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c548", MODE="0666"\nSUBSYSTEM=="hidraw", ENV{HID_ID}=="0005:0000046D:0000B042", MODE="0666"\nSUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c52b", MODE="0666"\nSUBSYSTEM=="hidraw", ENV{HID_ID}=="0005:0000046D:0000B019", MODE="0666"\n' | sudo tee /etc/udev/rules.d/99-litio-bolt.rules >/dev/null
 sudo udevadm control --reload-rules 2>/dev/null || true
 sudo udevadm trigger 2>/dev/null || true
 sudo mkdir -p /usr/share/icons/hicolor/scalable/apps /usr/share/icons/hicolor/256x256/apps
