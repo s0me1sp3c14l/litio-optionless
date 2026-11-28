@@ -112,3 +112,22 @@ def toggle_smartshift():
         except Exception: pass
         finally: os.close(fd)
     return None
+
+_rst_timer = None
+BUSY_FILE = "/tmp/litio_haptic_busy"
+def play_pulse(pattern, level, base_level=60, priority=False):
+    global _rst_timer
+    now = time.time()
+    if not priority and os.path.exists(BUSY_FILE):
+        try:
+            if now < float(open(BUSY_FILE).read().strip()): return
+        except Exception: pass
+    if _rst_timer: _rst_timer.cancel()
+    set_haptic_level(level > 0, level)
+    play_haptic(pattern)
+    wait = 4.3 if int(pattern) >= 10 else 0.7
+    if priority:
+        try: open(BUSY_FILE, "w").write(str(now + wait))
+        except Exception: pass
+    _rst_timer = threading.Timer(wait, lambda: set_haptic_level(base_level > 0, base_level))
+    _rst_timer.daemon = True; _rst_timer.start()

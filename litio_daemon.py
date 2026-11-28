@@ -3,7 +3,7 @@ import os, sys, re, json, signal, time, select, threading, subprocess, evdev
 from pynput import mouse, keyboard
 
 sys.path.insert(0, "/opt/ai-workspace/litio-optionless")
-import haptic_mx4
+import haptic_mx4, hover_haptic
 
 CONFIG_DIR = os.path.expanduser("~/.config/litio-optionless")
 PROFILES_FILE = os.path.join(CONFIG_DIR, "profiles.json")
@@ -124,7 +124,7 @@ class LitioDaemon:
             execute_action(eff_sc, cfg.get("volume_step", 3), pressed)
 
 def run():
-    d = LitioDaemon(); haptic_mx4.start_mx4_bridge(d.handle_slot); known = {}; hw_acc = 0; last_f_thumb = 0.0
+    d = LitioDaemon(); haptic_mx4.start_mx4_bridge(d.handle_slot); hover_haptic.start_hover_bridge(d.get_profile); known = {}; hw_acc = 0; last_f_thumb = 0.0
     while True:
         for p in evdev.list_devices():
             if p not in known:

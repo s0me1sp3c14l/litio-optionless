@@ -4,7 +4,7 @@ import haptic_mx4
 import sys, os, re, json, datetime, subprocess, xml.etree.ElementTree as ET
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QLabel,
-    QPushButton, QComboBox, QLineEdit, QMessageBox, QFrame, QStackedWidget, QListWidget,
+    QPushButton, QComboBox, QLineEdit, QCheckBox, QCheckBox, QMessageBox, QFrame, QStackedWidget, QListWidget,
     QSystemTrayIcon, QMenu, QInputDialog, QGraphicsOpacityEffect, QSlider, QCheckBox, QFileDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF, QRect, QRectF, QByteArray, QTimer, QPropertyAnimation, QVariantAnimation, QEasingCurve
@@ -279,11 +279,11 @@ class LitioOptionlessWindow(QMainWindow):
         top = QFrame(); top.setObjectName("TopBar"); top.setFixedHeight(58); tl = QHBoxLayout(top); tl.setContentsMargins(20, 0, 20, 0); tl.setSpacing(8)
         bb = QPushButton("← Geräte"); bb.setObjectName("SecondaryBtn"); bb.clicked.connect(lambda: self.root_stack.setCurrentIndex(0)); tl.addWidget(bb)
         self.tab_btns = []
-        for idx, lbl in enumerate(["Maus", "Zeigen & Scrollen", "App-Profile"]):
+        for idx, lbl in enumerate(["Maus", "Haptik", "Zeigen && Scrollen", "App-Profile"]):
             tb = QPushButton(lbl); tb.setObjectName("TabBtn"); tb.setProperty("active", "true" if idx == 0 else "false"); tb.clicked.connect(lambda _, i=idx: self.switch_tab(i)); tl.addWidget(tb); self.tab_btns.append(tb)
         tl.addStretch(); tl.addWidget(QLabel("Anwendung:"))
         self.prof_combo = QComboBox(); self.prof_combo.setMinimumWidth(200); self.prof_combo.addItems(list(self.config["profiles"].keys())); self.prof_combo.currentTextChanged.connect(self.on_profile_changed); tl.addWidget(self.prof_combo); ml.addWidget(top)
-        self.tab_stack = QStackedWidget(); self.tab_stack.addWidget(self.build_mouse_tab()); self.tab_stack.addWidget(self.build_scroll_tab()); self.tab_stack.addWidget(self.build_profiles_tab()); ml.addWidget(self.tab_stack, 1)
+        self.tab_stack = QStackedWidget(); self.tab_stack.addWidget(self.build_mouse_tab()); self.tab_stack.addWidget(self.build_haptic_tab()); self.tab_stack.addWidget(self.build_scroll_tab()); self.tab_stack.addWidget(self.build_profiles_tab()); ml.addWidget(self.tab_stack, 1)
         bot = QFrame(); bot.setObjectName("BottomBar"); bot.setFixedHeight(56); bl = QHBoxLayout(bot); bl.setContentsMargins(24, 0, 24, 0); bl.setSpacing(14)
         logo = QLabel("litio"); logo.setStyleSheet("font-size: 20px; font-weight: 900; color: #C084FC;"); bl.addWidget(logo); bl.addStretch()
         self.foot_dev_lbl = QLabel(self.active_dev["name"]); self.foot_dev_lbl.setStyleSheet("font-weight: 600;"); bl.addWidget(self.foot_dev_lbl)
@@ -389,7 +389,7 @@ class LitioOptionlessWindow(QMainWindow):
         foot = QHBoxLayout(); foot.addStretch(); ok_b = QPushButton("Übernehmen & Schließen"); ok_b.setObjectName("AccentBtn"); ok_b.clicked.connect(lambda: (self.save_current_slot(), ov.deleteLater())); foot.addWidget(ok_b); cl.addLayout(foot); ov.show()
     def build_scroll_tab(self):
         p = QWidget(); l = QVBoxLayout(p); l.setContentsMargins(28, 24, 28, 24); c = QFrame(); c.setObjectName("Card"); cl = QVBoxLayout(c); cl.setContentsMargins(24, 22, 24, 22); cl.setSpacing(16)
-        h = QLabel("Zeigen, Scrollen & Hardware-Brücke"); h.setStyleSheet("font-size: 17px; font-weight: 700; color: #C084FC;"); cl.addWidget(h)
+        h = QLabel("Zeigen && Scrollen"); h.setStyleSheet("font-size: 17px; font-weight: 700; color: #C084FC;"); cl.addWidget(h)
         dpi_val = int(self.config.get("dpi", 1200))
         self.dpi_lbl = QLabel(f"Zeigergeschwindigkeit (DPI): {dpi_val} DPI"); self.dpi_lbl.setStyleSheet("font-weight: 600;"); cl.addWidget(self.dpi_lbl)
         self.dpi_slider = QSlider(Qt.Orientation.Horizontal); self.dpi_slider.setRange(400, 4000); self.dpi_slider.setSingleStep(100); self.dpi_slider.setValue(dpi_val)
@@ -417,10 +417,59 @@ class LitioOptionlessWindow(QMainWindow):
         im = QPushButton("↑ Profil importieren (.json)"); im.setObjectName("SecondaryBtn"); im.clicked.connect(self.import_profile); r2.addWidget(im)
         db = QPushButton("Profil löschen"); db.setObjectName("SecondaryBtn"); db.clicked.connect(self.del_profile); r2.addWidget(db); cl.addLayout(r2)
         l.addWidget(c); return p
+    def save_hover_cfg(self, *_):
+        if getattr(self, "_loading_hover", False): return
+        pd = self.config["profiles"][self.prof_combo.currentText()]
+        pd["hover_haptic"] = {"enabled": self.hover_en.isChecked(), "buttons": self.h_btn.isChecked(), "tabs": self.h_tab.isChecked(), "links": self.h_lnk.isChecked(), "pattern": self.hv_pat.currentData(), "level": self.hv_lvl.value() if hasattr(self, "hv_lvl") else 25}
+        json.dump(self.config, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2)
+
+    def build_haptic_tab(self):
+        import shutil, haptic_mx4
+        w = QWidget(); lay = QHBoxLayout(w); lay.setContentsMargins(28, 22, 28, 22); lay.setSpacing(20)
+        c1 = QFrame(); c1.setObjectName("Card"); l1 = QVBoxLayout(c1); l1.setContentsMargins(20, 18, 20, 18); l1.setSpacing(12)
+        h1 = QLabel("Haptisches UI-Feedback (Hover)"); h1.setStyleSheet("font-size: 16px; font-weight: 700; color: #C084FC;"); l1.addWidget(h1)
+        d1 = QLabel("Löst beim Überfahren von Bedienelementen im aktiven Profil einen dezenten Mikrotick aus."); d1.setWordWrap(True); d1.setStyleSheet("color: #B4A8C8;"); l1.addWidget(d1)
+        self.hover_en = QCheckBox("Hover-Haptik für aktuelles Profil aktivieren"); self.hover_en.setStyleSheet("color: #E8E3F2; font-weight: 600;"); l1.addWidget(self.hover_en)
+        self.h_btn = QCheckBox("Schaltflächen & Toolbar-Icons"); self.h_tab = QCheckBox("Browser-Tabs & Menüs"); self.h_lnk = QCheckBox("Web-Links (z. B. in Firefox)")
+        for cb in (self.h_btn, self.h_tab, self.h_lnk): cb.setStyleSheet("color: #B4A8C8;"); l1.addWidget(cb)
+        pr = QHBoxLayout(); pr.addWidget(QLabel("Tick-Muster:")); self.hv_pat = QComboBox(); [self.hv_pat.addItem(f"Muster {i}", i) for i in range(15)]; pr.addWidget(self.hv_pat); l1.addLayout(pr); l1.addStretch()
+        for cb in (self.hover_en, self.h_btn, self.h_tab, self.h_lnk): cb.toggled.connect(self.save_hover_cfg)
+        self.hv_pat.currentIndexChanged.connect(self.save_hover_cfg)
+        sr = QHBoxLayout(); sr.addWidget(QLabel("Hover-Intensität:")); self.hv_lvl = QSlider(Qt.Orientation.Horizontal); self.hv_lvl.setRange(0, 100); self.hv_lvl.setValue(25)
+        self.hv_lvl.sliderReleased.connect(lambda: (self.save_hover_cfg(), haptic_mx4.play_pulse(self.hv_pat.currentData(), self.hv_lvl.value(), self.h_lvl.value())))
+        sr.addWidget(self.hv_lvl); l1.addLayout(sr); lay.addWidget(c1, 1)
+        c2 = QFrame(); c2.setObjectName("Card"); l2 = QVBoxLayout(c2); l2.setContentsMargins(20, 18, 20, 18); l2.setSpacing(10)
+        h2 = QLabel("Mail & Messenger Vibrationsalarm"); h2.setStyleSheet("font-size: 16px; font-weight: 700; color: #C084FC;"); l2.addWidget(h2)
+        d2 = QLabel("Weist eingehenden Desktop-Benachrichtigungen erkannter Apps ein eigenes Haptik-Muster zu."); d2.setWordWrap(True); d2.setStyleSheet("color: #B4A8C8;"); l2.addWidget(d2)
+        apps = [("thunderbird", "Thunderbird (Mail)", ["thunderbird"]), ("element", "Element / Matrix", ["element-desktop", "element"]), ("telegram", "Telegram", ["telegram-desktop", "telegram", "Telegram", "org.telegram.desktop"]), ("signal", "Signal", ["signal-desktop"]), ("discord", "Discord", ["discord"]), ("slack", "Slack", ["slack"]), ("other", "Sonstige Benachrichtigungen", [])]
+        pats = [("Aus", -1)] + [(f"Muster {i}", i) for i in range(15)]
+        ncfg = self.config.setdefault("notify_haptic", {})
+        for key, title, bins in apps:
+            if bins and not any(shutil.which(b) or any(os.path.exists(os.path.expanduser(d + b)) for d in ("/snap/bin/", "/var/lib/flatpak/exports/bin/", "~/.local/share/flatpak/exports/bin/", "~/Telegram/", "/opt/telegram/")) for b in bins): continue
+            row = QHBoxLayout(); lbl = QLabel(title); lbl.setStyleSheet("color: #E8E3F2;"); row.addWidget(lbl, 1)
+            cb = QComboBox(); [cb.addItem(pl, pv) for pl, pv in pats]; cur = ncfg.get(key, -1); idx = cb.findData(cur); cb.setCurrentIndex(idx if idx >= 0 else 0)
+            tb = QPushButton("▶"); tb.setObjectName("SecondaryBtn"); tb.setFixedWidth(34); tb.setToolTip("Muster testen")
+            def _chg(_, k=key, box=cb): self.config.setdefault("notify_haptic", {})[k] = box.currentData(); json.dump(self.config, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2)
+            def _tst(_, box=cb): haptic_mx4.play_pulse(box.currentData(), self.nt_lvl.value(), self.h_lvl.value(), priority=True) if box.currentData() >= 0 else None
+            cb.currentIndexChanged.connect(_chg); tb.clicked.connect(_tst); row.addWidget(cb); row.addWidget(tb); l2.addLayout(row)
+        nr = QHBoxLayout(); nr.addWidget(QLabel("Alarm-Intensität:")); self.nt_lvl = QSlider(Qt.Orientation.Horizontal); self.nt_lvl.setRange(0, 100); self.nt_lvl.setValue(int(ncfg.get("notify_level", 85)))
+        def _nt_rel():
+            self.config.setdefault("notify_haptic", {})["notify_level"] = self.nt_lvl.value()
+            json.dump(self.config, open(PROFILES_FILE, "w", encoding="utf-8"), indent=2)
+            haptic_mx4.play_pulse(4, self.nt_lvl.value(), self.h_lvl.value())
+        self.nt_lvl.sliderReleased.connect(_nt_rel); nr.addWidget(self.nt_lvl); l2.addLayout(nr); l2.addStretch()
+        ab = QPushButton("Haptik-Einstellungen übernehmen"); ab.setObjectName("AccentBtn")
+        ab.clicked.connect(lambda: (self.save_hover_cfg(), haptic_mx4.play_haptic(1), self.status_lbl.setText("Haptik-Einstellungen gespeichert & aktiv!")))
+        l2.addWidget(ab); lay.addWidget(c2, 1)
+        return w
+
     def switch_tab(self, idx):
         self.tab_stack.setCurrentIndex(idx)
         for i, b in enumerate(self.tab_btns): b.setProperty("active", "true" if i == idx else "false"); b.style().unpolish(b); b.style().polish(b)
     def on_profile_changed(self, name):
+        self._loading_hover = True; hc = self.config["profiles"].get(name, {}).get("hover_haptic", {})
+        if hasattr(self, "hover_en"): self.hover_en.setChecked(bool(hc.get("enabled", False))); self.h_btn.setChecked(bool(hc.get("buttons", True))); self.h_tab.setChecked(bool(hc.get("tabs", True))); self.h_lnk.setChecked(bool(hc.get("links", False))); self.hv_pat.setCurrentIndex(int(hc.get("pattern", 0))); self.hv_lvl.setValue(int(hc.get("level", 25)))
+        self._loading_hover = False
         self.current_profile = name; pd = self.config["profiles"].get(name, {}); self.wm_class_edit.setText(", ".join(pd.get("wm_classes", []))); self.wm_class_edit.setEnabled(name != "Global (Standard)"); self.select_slot(self.current_slot)
     def select_slot(self, slot):
         self.current_slot = slot; self.slot_title.setText(ACTION_LABELS.get(slot, slot))
