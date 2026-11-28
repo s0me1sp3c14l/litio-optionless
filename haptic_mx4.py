@@ -7,17 +7,20 @@ CID_SLOTS = {
     b'\x00\xc3': "gesture_click", b'\x00\xc4': "mode_shift", b'\x01\xa0': "haptic_panel",
 }
 
-def _open_bolt():
+def _open_mx4():
     for p in sorted(glob.glob('/dev/hidraw*')):
         b = os.path.basename(p)
         u, r = f"/sys/class/hidraw/{b}/device/uevent", f"/sys/class/hidraw/{b}/device/report_descriptor"
         if os.path.exists(u) and os.path.exists(r):
-            if "C548" in open(u).read().upper() and b'\x06\x00\xff\x09\x02' in open(r, 'rb').read():
-                return os.open(p, os.O_RDWR | os.O_NONBLOCK)
-    return None
+            ut = open(u).read().upper()
+            if "C548" in ut and b'\x06\x00\xff\x09\x02' in open(r, 'rb').read():
+                return os.open(p, os.O_RDWR | os.O_NONBLOCK), 0x01
+            if "0000046D:0000B042" in ut:
+                return os.open(p, os.O_RDWR | os.O_NONBLOCK), 0xFF
+    return None, None
 
-def _send(feat_idx, fn, payload=b'', slot=1):
-    fd = _open_bolt()
+def _send(feat_idx, fn, payload=b''):
+    fd, slot = _open_mx4()
     if fd is None: return None
     try:
         os.write(fd, bytes([0x11, slot, feat_idx, (fn << 4) | 0x0A]) + payload.ljust(16, b'\x00'))
@@ -30,47 +33,46 @@ def _send(feat_idx, fn, payload=b'', slot=1):
     except Exception: pass
     finally: os.close(fd)
 
-def play_haptic(pattern=1, slot=1):
-    return _send(0x0B, 4, bytes([max(0, min(14, int(pattern)))]), slot)
+def play_haptic(pattern=1):
+    return _send(0x0B, 4, bytes([max(0, min(14, int(pattern)))]))
 
-def set_haptic_level(enabled=True, level=60, slot=1):
-    return _send(0x0B, 2, bytes([1 if enabled else 0, max(0, min(100, int(level)))]), slot)
+def set_haptic_level(enabled=True, level=60):
+    return _send(0x0B, 2, bytes([1 if enabled else 0, max(0, min(100, int(level)))]))
 
-def set_force_threshold(val=4646, slot=1):
+def set_force_threshold(val=4646):
     v = max(274, min(8974, int(val)))
-    return _send(0x0C, 3, bytes([(v >> 8) & 0xFF, v & 0xFF]), slot)
+    return _send(0x0C, 3, bytes([(v >> 8) & 0xFF, v & 0xFF]))
 
-def _init_mx4(fd):
+def _init_mx4(fd, slot):
     for cid_b in CID_SLOTS:
-        os.write(fd, bytes([0x11, 1, 13, (3 << 4) | 0x0A]) + cid_b + b'\x03' + bytes(13))
+        os.write(fd, bytes([0x11, slot, 13, (3 << 4) | 0x0A]) + cid_b + b'\x03' + bytes(13))
         time.sleep(0.03)
     if os.path.exists(PROFILES_FILE):
         hc = json.load(open(PROFILES_FILE, encoding="utf-8")).get("mx4_haptic", {})
         lv, frc = hc.get("level", 60), hc.get("force", 4646)
-        os.write(fd, bytes([0x11, 1, 0x0B, (2 << 4) | 0x0A, 1 if lv > 0 else 0, lv]) + bytes(14))
+        os.write(fd, bytes([0x11, slot, 0x0B, (2 << 4) | 0x0A, 1 if lv > 0 else 0, lv]) + bytes(14))
         time.sleep(0.03)
-        os.write(fd, bytes([0x11, 1, 0x0C, (3 << 4) | 0x0A, (frc >> 8) & 0xFF, frc & 0xFF]) + bytes(14))
+        os.write(fd, bytes([0x11, slot, 0x0C, (3 << 4) | 0x0A, (frc >> 8) & 0xFF, frc & 0xFF]) + bytes(14))
 
 def start_mx4_bridge(on_slot):
     def _loop():
         active_slot = None
         while True:
-            fd = _open_bolt()
+            fd, slot = _open_mx4()
             if fd is None: time.sleep(2.0); continue
             try:
-                _init_mx4(fd)
+                _init_mx4(fd, slot)
+                hdr = bytes([0x11, slot, 0x0D, 0x00])
                 while True:
                     r, _, _ = select.select([fd], [], [], 1.5)
                     if not r:
-                        os.write(fd, bytes([0x11, 1, 13, (3 << 4) | 0x0A, 0x01, 0xA0, 0x03]) + bytes(13)); continue
+                        os.write(fd, bytes([0x11, slot, 13, (3 << 4) | 0x0A, 0x01, 0xA0, 0x03]) + bytes(13)); continue
                     d = os.read(fd, 64)
-                    if d.startswith(b'\x10\x01\x41'): _init_mx4(fd)
-                    elif d.startswith(b'\x11\x01\x0d\x00'):
+                    if d.startswith(bytes([0x10, slot, 0x41])): _init_mx4(fd, slot)
+                    elif d.startswith(hdr):
                         hit = next((s for b_cid, s in CID_SLOTS.items() if b_cid in d), None)
-                        if hit:
-                            active_slot = hit; on_slot(active_slot, True)
-                        elif active_slot:
-                            on_slot(active_slot, False); active_slot = None
+                        if hit: active_slot = hit; on_slot(active_slot, True)
+                        elif active_slot: on_slot(active_slot, False); active_slot = None
             except Exception: time.sleep(1.0)
             finally:
                 try: os.close(fd)

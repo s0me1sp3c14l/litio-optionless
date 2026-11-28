@@ -6,9 +6,10 @@ sudo apt-get install -y python3-pyqt6 python3-pyqt6.qtsvg python3-evdev python3-
 sudo apt-get install -y logid 2>/dev/null || sudo apt-get install -y logiops 2>/dev/null || echo "Hinweis: logid/logiops nicht in apt gefunden (MX Master 4 Bridge läuft nativ)."
 sudo mkdir -p "$APP_DIR"
 sudo cp -r ./* "$APP_DIR"/
+sudo chown -R "$USER:$USER" "$APP_DIR"
 sudo chmod +x "$APP_DIR/gui.py" "$APP_DIR/litio_daemon.py" "$APP_DIR/start.sh" "$APP_DIR/orbit_ring.py"
 sudo ln -sf "$APP_DIR/start.sh" /usr/local/bin/litio
-echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c548", MODE="0666"' | sudo tee /etc/udev/rules.d/99-litio-bolt.rules >/dev/null
+printf 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c548", MODE="0666"\nSUBSYSTEM=="hidraw", ENV{HID_ID}=="0005:0000046D:0000B042", MODE="0666"\n' | sudo tee /etc/udev/rules.d/99-litio-bolt.rules >/dev/null
 sudo udevadm control --reload-rules 2>/dev/null || true
 sudo udevadm trigger 2>/dev/null || true
 sudo mkdir -p /usr/share/icons/hicolor/scalable/apps /usr/share/icons/hicolor/256x256/apps
